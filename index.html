@@ -12,32 +12,87 @@
   <style>
     html, body { height: 100%; margin: 0; }
     #map { height: 100%; width: 100%; }
+
     .hud {
-      position: absolute; left: 12px; top: 12px; z-index: 10;
-      background: rgba(0,0,0,0.6); color: #fff; padding: 10px 12px;
+      position: absolute;
+      left: 12px;
+      top: 12px;
+      z-index: 10;
+
+      background: rgba(0,0,0,0.60);
+      color: #fff;
+      padding: 10px 12px;
+      border-radius: 12px;
+
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
-      border-radius: 10px; font-size: 14px;
-      max-width: 280px;
+      font-size: 14px;
+      max-width: 320px;
+      backdrop-filter: blur(6px);
     }
+
+    .hud .title {
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .hud .row {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
     .hud button {
-      margin-top: 8px; width: 100%; padding: 10px;
-      border: 0; border-radius: 8px; cursor: pointer;
+      flex: 1;
+      padding: 10px 12px;
+      border: 0;
+      border-radius: 10px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    /* Litt GTA-ish knapper */
+    .btn-primary { background: #e5e7eb; color: #111827; }
+    .btn-danger  { background: #ef4444; color: #ffffff; }
+    .btn-muted   { background: rgba(255,255,255,0.12); color: #ffffff; border: 1px solid rgba(255,255,255,0.18); }
+
+    .hint {
+      margin-top: 8px;
+      font-size: 12px;
+      opacity: 0.85;
+      line-height: 1.3;
+    }
+
+    .attrib {
+      margin-top: 8px;
+      font-size: 12px;
+      opacity: 0.75;
     }
   </style>
 </head>
 <body>
   <div id="map"></div>
+
   <div class="hud">
-    <div><b>GTA-ish Map</b></div>
-    <div id="status">Trykk “Start GPS”.</div>
-    <button id="gpsBtn">Start GPS</button>
-    <div style="margin-top:8px; font-size:12px; opacity:.8;">
+    <div class="title">GTA-ish Map</div>
+    <div id="status">Trykk “Start GPS”, så trykk på kartet for å sette waypoint.</div>
+
+    <div class="row">
+      <button id="gpsBtn" class="btn-primary">Start GPS</button>
+      <button id="clearBtn" class="btn-muted">Clear waypoint</button>
+    </div>
+
+    <div class="hint">
+      • Trykk på kartet for waypoint<br/>
+      • Lilla linje følger veiene (ingen navigasjon)
+    </div>
+
+    <div class="attrib">
       Kart: © OpenStreetMap contributors
     </div>
   </div>
 
   <script>
-    // Gratis kartfliser (OSM). For demo/prototype. Ikke for stor trafikk.
+    // Gratis kartfliser (OSM). For prototype. Ikke for stor trafikk.
     const map = new maplibregl.Map({
       container: 'map',
       style: {
@@ -62,22 +117,74 @@
 
     let userMarker = null;
     let watchId = null;
+    let userLngLat = null;
+
+    let destMarker = null;
+    let lastRouteAt = 0;
 
     const statusEl = document.getElementById('status');
     const gpsBtn = document.getElementById('gpsBtn');
+    const clearBtn = document.getElementById('clearBtn');
 
     function setStatus(msg) { statusEl.textContent = msg; }
 
-    gpsBtn.addEventListener('click', async () => {
+    function clearRouteAndWaypoint() {
+      // Fjern waypoint-marker
+      if (destMarker) {
+        destMarker.remove();
+        destMarker = null;
+      }
+      // Tøm rute-linje
+      const src = map.getSource('route');
+      if (src) {
+        src.setData({ type: 'FeatureCollection', features: [] });
+      }
+      setStatus('Waypoint fjernet. Trykk på kartet for ny waypoint.');
+    }
+
+    map.on('load', () => {
+      // Kilde for rute-linja
+      map.addSource('route', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] }
+      });
+
+      // Lilla GTA-linje
+      map.addLayer({
+        id: 'route-line',
+        type: 'line',
+        source: 'route',
+        paint: {
+          'line-width': 6,
+          'line-opacity': 0.92,
+          'line-color': '#a855f7'
+        }
+      });
+
+      // Litt "glow" under (tykkere og mer transparent)
+      map.addLayer({
+        id: 'route-glow',
+        type: 'line',
+        source: 'route',
+        paint: {
+          'line-width': 12,
+          'line-opacity': 0.25,
+          'line-color': '#a855f7'
+        }
+      }, 'route-line'); // legg under
+    });
+
+    gpsBtn.addEventListener('click', () => {
       if (!navigator.geolocation) {
         setStatus('GPS støttes ikke i denne nettleseren.');
         return;
       }
+
       if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
         gpsBtn.textContent = 'Start GPS';
-        setStatus('GPS stoppet.');
+        setStatus('GPS stoppet. Trykk Start GPS for å starte igjen.');
         return;
       }
 
@@ -89,7 +196,9 @@
           const lng = pos.coords.longitude;
           const lat = pos.coords.latitude;
 
-          setStatus(`Du er her: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+          userLngLat = [lng, lat];
+
+          setStatus(`Du er her: ${lat.toFixed(5)}, ${lng.toFixed(5)} (trykk på kartet for waypoint)`);
 
           if (!userMarker) {
             userMarker = new maplibregl.Marker({ color: '#2f80ff' })
@@ -102,6 +211,8 @@
         },
         (err) => {
           setStatus('GPS-feil: ' + err.message);
+          gpsBtn.textContent = 'Start GPS';
+          watchId = null;
         },
         {
           enableHighAccuracy: true,
@@ -109,6 +220,74 @@
           timeout: 10000
         }
       );
+    });
+
+    clearBtn.addEventListener('click', () => {
+      clearRouteAndWaypoint();
+    });
+
+    async function drawRouteTo(destLngLat) {
+      if (!userLngLat) {
+        setStatus('Start GPS først, så sett waypoint.');
+        return;
+      }
+
+      // enkel rate-limit så du ikke spammer routing
+      const now = Date.now();
+      if (now - lastRouteAt < 1200) return;
+      lastRouteAt = now;
+
+      const [uLng, uLat] = userLngLat;
+      const [dLng, dLat] = destLngLat;
+
+      // Gratis OSRM demo. Funker fint til prototype, men kan rate-limite ved mye trafikk.
+      const url =
+        `https://router.project-osrm.org/route/v1/walking/` +
+        `${uLng},${uLat};${dLng},${dLat}` +
+        `?overview=full&geometries=geojson`;
+
+      try {
+        setStatus('Henter rute...');
+        const res = await fetch(url);
+        const data = await res.json();
+
+        if (!data.routes || !data.routes[0]) {
+          setStatus('Fant ingen rute (prøv et annet punkt).');
+          return;
+        }
+
+        const route = data.routes[0].geometry; // geojson LineString
+        const fc = {
+          type: 'FeatureCollection',
+          features: [{ type: 'Feature', properties: {}, geometry: route }]
+        };
+
+        const src = map.getSource('route');
+        if (src) src.setData(fc);
+
+        const distM = data.routes[0].distance;
+        const mins = Math.max(1, Math.round(data.routes[0].duration / 60));
+
+        setStatus(`Waypoint satt. ~${mins} min • ${(distM/1000).toFixed(2)} km`);
+      } catch (e) {
+        setStatus('Rute-feil: ' + e.message);
+      }
+    }
+
+    // Trykk på kartet for waypoint + rute
+    map.on('click', (e) => {
+      const dest = [e.lngLat.lng, e.lngLat.lat];
+
+      // Lag/flytt waypoint-marker (oransje)
+      if (!destMarker) {
+        destMarker = new maplibregl.Marker({ color: '#f59e0b' })
+          .setLngLat(dest)
+          .addTo(map);
+      } else {
+        destMarker.setLngLat(dest);
+      }
+
+      drawRouteTo(dest);
     });
   </script>
 </body>
