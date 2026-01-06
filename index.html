@@ -1,167 +1,541 @@
 <!doctype html>
 <html lang="no">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>GTA-ish Map</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GTA-ish Map</title>
 
-<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
-<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 
-<style>
-html,body{margin:0;height:100%}
-#map{width:100%;height:100%}
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #map { height: 100%; width: 100%; }
 
-/* GTA-ish HUD */
-.hud{
- position:absolute;top:12px;left:12px;z-index:10;
- background:rgba(0,0,0,.55);
- color:#fff;
- padding:10px 12px;
- border-radius:10px;
- font-family:system-ui,Arial;
- font-size:12px;
- width:210px;
- backdrop-filter:blur(6px)
-}
-.hud b{font-size:18px;display:block;margin-bottom:4px}
-.hud button{
- width:100%;margin-top:6px;
- padding:7px;border:0;border-radius:8px;
- font-weight:700;cursor:pointer
-}
-.btn-main{background:#eee;color:#111}
-.btn-alt{background:#ffffff22;color:#fff;border:1px solid #ffffff33}
+    /* Compact HUD */
+    .hud{
+      position:absolute; top:12px; left:12px; z-index:10;
+      background:rgba(0,0,0,.55); color:#fff;
+      padding:10px 12px; border-radius:10px;
+      font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      font-size:12px; width:230px;
+      backdrop-filter: blur(6px);
+      border: 1px solid rgba(255,255,255,0.10);
+    }
+    .hud .title{ font-weight:800; font-size:16px; margin-bottom:6px; }
+    .hud button{
+      width:100%; margin-top:6px; padding:8px 10px;
+      border:0; border-radius:8px; cursor:pointer;
+      font-weight:800; font-size:13px;
+    }
+    .btn-main{ background:#eee; color:#111; }
+    .btn-alt{ background:rgba(255,255,255,0.12); color:#fff; border:1px solid rgba(255,255,255,0.18); }
+    .hint{ margin-top:8px; opacity:.8; line-height:1.35; }
+    .small{ margin-top:6px; opacity:.8; font-size:12px; }
+    .attrib{ margin-top:10px; opacity:.65; font-size:11px; }
 
-/* MARKERS */
-.marker{width:26px;height:26px}
-.marker svg{width:100%;height:100%}
-</style>
+    /* Markers */
+    .marker-wrap { display:grid; place-items:center; user-select:none; }
+    .shadow { filter: drop-shadow(0 2px 2px rgba(0,0,0,0.55)); }
+    .poi { width:22px; height:22px; }
+    .userpin { width:26px; height:26px; }
+    .waypoint { width:34px; height:34px; }
+  </style>
 </head>
 
 <body>
-<div id="map"></div>
+  <div id="map"></div>
 
-<div class="hud">
-<b>GTA-ish Map</b>
-<div id="status">Trykk Start GPS</div>
-<button id="gps" class="btn-main">Start GPS</button>
-<button id="clear" class="btn-alt">Clear waypoint</button>
-<div style="opacity:.7;margin-top:6px">
-• Trykk på kartet for waypoint<br>
-• POI lastes når du zoomer inn
-</div>
-</div>
+  <div class="hud">
+    <div class="title">GTA-ish Map</div>
+    <div id="status">Trykk Start GPS</div>
+
+    <button id="gpsBtn" class="btn-main">Start GPS</button>
+    <button id="clearBtn" class="btn-alt">Clear waypoint</button>
+
+    <div class="hint">
+      • Trykk på kartet for waypoint<br>
+      • Lilla linje følger veiene (ingen navigasjon)<br>
+      • POI lastes når du zoomer inn (14+)
+    </div>
+
+    <div id="poiStatus" class="small">POI: zoom inn (14+)…</div>
+
+    <div class="attrib">© OpenStreetMap contributors • Basemap © CARTO • Routing: OSRM</div>
+  </div>
 
 <script>
-const map=new maplibregl.Map({
- container:"map",
- style:{
-  version:8,
-  sources:{
-   base:{
-    type:"raster",
-    tiles:[
-     "https://a.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png",
-     "https://b.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png"
-    ],
-    tileSize:256
-   }
-  },
-  layers:[{id:"base",type:"raster",source:"base"}]
- },
- center:[10.75,59.91],
- zoom:13
-})
+  // -----------------------
+  // Icons (GTA-ish: white w/ black outline)
+  // -----------------------
+  function wrap(el, cls){
+    const d=document.createElement('div');
+    d.className = `marker-wrap shadow ${cls}`;
+    d.appendChild(el);
+    return d;
+  }
 
-let user=null, userMarker=null, waypoint=null, routeAt=0
-const status=document.getElementById("status")
+  function svgPathIcon(pathD, size=30, fill="#fff", stroke="#000", strokeW=2){
+    const ns="http://www.w3.org/2000/svg";
+    const svg=document.createElementNS(ns,"svg");
+    svg.setAttribute("viewBox","0 0 30 30");
+    svg.setAttribute("width", String(size));
+    svg.setAttribute("height", String(size));
+    const p=document.createElementNS(ns,"path");
+    p.setAttribute("d", pathD);
+    p.setAttribute("fill", fill);
+    p.setAttribute("stroke", stroke);
+    p.setAttribute("stroke-width", String(strokeW));
+    p.setAttribute("stroke-linejoin","round");
+    p.setAttribute("stroke-linecap","round");
+    svg.appendChild(p);
+    return svg;
+  }
 
-function icon(type){
- const paths={
-  user:"M13 2 L23 22 L13 17 L3 22 Z",
-  waypoint:"M15 4 L18 12 L26 15 L18 18 L15 26 L12 18 L4 15 L12 12 Z",
-  food:"M6 6h18v18H6z",
-  clothes:"M8 6l7-3 7 3 2 4-3 2v12H11V12l-3-2z",
-  fuel:"M9 6h12v18H9z",
-  parking:"M10 6h7a6 6 0 010 12h-7z",
-  bank:"M5 10h20v14H5zM5 10l10-5 10 5",
-  police:"M15 4l10 4v7c0 6-5 10-10 11-5-1-10-5-10-11V8z",
-  hospital:"M13 6h4v6h6v4h-6v6h-4v-6H7v-4h6z",
-  hotel:"M6 8h8v14H6zM16 12h8v10h-8z"
- }
- const el=document.createElement("div")
- el.className="marker"
- el.innerHTML=`
- <svg viewBox="0 0 30 30">
- <path d="${paths[type]}" fill="#fff" stroke="#000" stroke-width="2"/>
- </svg>`
- return el
-}
+  function createUserArrowEl(){
+    // white triangle arrow
+    const p = "M13 2 L23 22 L13 17 L3 22 Z";
+    return wrap(svgPathIcon(p, 26, "#fff", "#000", 2), "userpin");
+  }
 
-/* GPS */
-document.getElementById("gps").onclick=()=>{
- navigator.geolocation.watchPosition(p=>{
-  user=[p.coords.longitude,p.coords.latitude]
-  status.textContent=`Du er her`
-  if(!userMarker){
-   userMarker=new maplibregl.Marker({element:icon("user")})
-    .setLngLat(user).addTo(map)
-   map.flyTo({center:user,zoom:16})
-  }else userMarker.setLngLat(user)
- })
-}
+  function createWaypointEl(){
+    // purple "flower/clover" (like earlier)
+    const ns="http://www.w3.org/2000/svg";
+    const svg=document.createElementNS(ns,"svg");
+    svg.setAttribute("viewBox","0 0 30 30");
+    svg.setAttribute("width","34");
+    svg.setAttribute("height","34");
 
-/* Waypoint */
-map.on("click",e=>{
- if(!user)return
- if(!waypoint){
-  waypoint=new maplibregl.Marker({element:icon("waypoint")})
-   .setLngLat(e.lngLat).addTo(map)
- }else waypoint.setLngLat(e.lngLat)
-})
+    const g=document.createElementNS(ns,"g");
+    g.setAttribute("fill","none");
+    g.setAttribute("stroke","#a855f7");
+    g.setAttribute("stroke-width","2.8");
+    g.setAttribute("stroke-linecap","round");
+    g.setAttribute("stroke-linejoin","round");
 
-/* POI */
-async function loadPOI(){
- if(map.getZoom()<14||!user)return
- const b=map.getBounds()
- const q=`
-[out:json];
+    const paths=[
+      "M15 7 C12.2 7,10 9.2,10 12 C10 14.8,12.2 17,15 17 C17.8 17,20 14.8,20 12 C20 9.2,17.8 7,15 7Z",
+      "M15 13 C12.2 13,10 15.2,10 18 C10 20.8,12.2 23,15 23 C17.8 23,20 20.8,20 18 C20 15.2,17.8 13,15 13Z",
+      "M7 15 C7 12.2,9.2 10,12 10 C14.8 10,17 12.2,17 15 C17 17.8,14.8 20,12 20 C9.2 20,7 17.8,7 15Z",
+      "M13 15 C13 12.2,15.2 10,18 10 C20.8 10,23 12.2,23 15 C23 17.8,20.8 20,18 20 C15.2 20,13 17.8,13 15Z"
+    ];
+    for(const d of paths){
+      const p=document.createElementNS(ns,"path");
+      p.setAttribute("d", d);
+      g.appendChild(p);
+    }
+    const c=document.createElementNS(ns,"circle");
+    c.setAttribute("cx","15"); c.setAttribute("cy","15"); c.setAttribute("r","2.2");
+    g.appendChild(c);
+
+    svg.appendChild(g);
+    return wrap(svg, "waypoint");
+  }
+
+  // POI symbols (white with black outline)
+  const POI_PATH = {
+    fast_food:  "M6 6h18v18H6z",                 // simple box (burger placeholder)
+    nightclub:  "M10 6h10v18H10z",                // tall box
+    supermarket:"M7 10h16v12H7z",                 // store
+    convenience:"M7 10h16v12H7z",                 // same as store
+    clothes:    "M8 6l7-3 7 3 2 4-3 2v12H11V12l-3-2z", // shirt
+    hospital:   "M13 6h4v6h6v4h-6v6h-4v-6H7v-4h6z",     // cross
+    fuel:       "M9 6h12v18H9z",                  // pump-ish
+    parking:    "M10 6h7a6 6 0 010 12h-7z",        // P-ish block
+    bank:       "M5 10h20v14H5z M5 10l10-5 10 5",  // bank
+    atm:        "M5 10h20v14H5z M5 10l10-5 10 5",  // same bucket
+    police:     "M15 4l10 4v7c0 6-5 10-10 11-5-1-10-5-10-11V8z", // shield
+    hotel:      "M6 8h8v14H6z M16 12h8v10h-8z"     // buildings
+  };
+
+  function createPOIEl(kind){
+    const pathD = POI_PATH[kind] || "M15 6a9 9 0 1 0 0.01 0Z";
+    const svg = svgPathIcon(pathD, 22, "#fff", "#000", 2);
+    return wrap(svg, "poi");
+  }
+
+  // -----------------------
+  // Map
+  // -----------------------
+  const map = new maplibregl.Map({
+    container: "map",
+    style: {
+      version: 8,
+      sources: {
+        base: {
+          type: "raster",
+          tiles: [
+            "https://a.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png",
+            "https://b.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png",
+            "https://c.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png",
+            "https://d.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png"
+          ],
+          tileSize: 256,
+          attribution: "© OpenStreetMap contributors © CARTO"
+        }
+      },
+      layers: [{ id: "base", type: "raster", source: "base" }]
+    },
+    center: [10.75, 59.91],
+    zoom: 13
+  });
+
+  // Route layer
+  map.on("load", () => {
+    map.addSource("route", { type:"geojson", data:{ type:"FeatureCollection", features:[] } });
+
+    map.addLayer({
+      id:"route-glow",
+      type:"line",
+      source:"route",
+      paint:{ "line-width":12, "line-opacity":0.22, "line-color":"#a855f7" }
+    });
+
+    map.addLayer({
+      id:"route-line",
+      type:"line",
+      source:"route",
+      paint:{ "line-width":6, "line-opacity":0.92, "line-color":"#a855f7" }
+    });
+
+    map.on("moveend", schedulePOILoad);
+  });
+
+  // -----------------------
+  // UI state
+  // -----------------------
+  const statusEl = document.getElementById("status");
+  const poiStatusEl = document.getElementById("poiStatus");
+  const gpsBtn = document.getElementById("gpsBtn");
+  const clearBtn = document.getElementById("clearBtn");
+
+  let watchId = null;
+  let userLngLat = null;
+  let userMarker = null;
+  let userEl = null;
+
+  let destMarker = null;
+  let destLngLat = null;
+  let lastRouteAt = 0;
+
+  // POI markers with cleanup
+  const poiMarkers = new Map(); // id -> marker
+  let poiFetchTimer = null;
+  let poiAbort = null;
+
+  function setStatus(t){ statusEl.textContent = t; }
+  function setPOIStatus(t){ poiStatusEl.textContent = t; }
+
+  function clearRouteAndWaypoint(){
+    destLngLat = null;
+    if(destMarker){ destMarker.remove(); destMarker = null; }
+    const src = map.getSource("route");
+    if(src) src.setData({ type:"FeatureCollection", features:[] });
+    setStatus("Waypoint fjernet.");
+  }
+
+  clearBtn.addEventListener("click", clearRouteAndWaypoint);
+
+  // -----------------------
+  // GPS toggle
+  // -----------------------
+  gpsBtn.addEventListener("click", () => {
+    if(!navigator.geolocation){
+      setStatus("GPS støttes ikke.");
+      return;
+    }
+
+    if(watchId !== null){
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+      gpsBtn.textContent = "Start GPS";
+      setStatus("GPS stoppet.");
+      return;
+    }
+
+    gpsBtn.textContent = "Stop GPS";
+    setStatus("Ber om posisjon…");
+
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const lng = pos.coords.longitude;
+        const lat = pos.coords.latitude;
+        userLngLat = [lng, lat];
+
+        const heading = (typeof pos.coords.heading === 'number' && !Number.isNaN(pos.coords.heading))
+          ? pos.coords.heading : null;
+
+        setStatus(`Du er her: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+
+        if(!userMarker){
+          userEl = createUserArrowEl();
+          userMarker = new maplibregl.Marker({ element: userEl })
+            .setLngLat(userLngLat)
+            .addTo(map);
+          map.flyTo({ center: userLngLat, zoom: 16 });
+        } else {
+          userMarker.setLngLat(userLngLat);
+        }
+
+        if(userEl && heading !== null){
+          userEl.style.transform = `rotate(${heading}deg)`;
+        }
+
+        // If waypoint exists, refresh route occasionally as you move
+        if(destLngLat) drawRouteTo(destLngLat, true);
+        schedulePOILoad();
+      },
+      (err) => {
+        setStatus("GPS-feil: " + err.message);
+        gpsBtn.textContent = "Start GPS";
+        watchId = null;
+      },
+      { enableHighAccuracy: true, maximumAge: 1200, timeout: 10000 }
+    );
+  });
+
+  // -----------------------
+  // Waypoint on click
+  // -----------------------
+  map.on("click", (e) => {
+    const ll = [e.lngLat.lng, e.lngLat.lat];
+    destLngLat = ll;
+
+    if(!destMarker){
+      destMarker = new maplibregl.Marker({ element: createWaypointEl() })
+        .setLngLat(ll)
+        .addTo(map);
+    } else {
+      destMarker.setLngLat(ll);
+    }
+
+    drawRouteTo(ll, false);
+  });
+
+  async function drawRouteTo(dest, isAuto=false){
+    if(!userLngLat){ setStatus("Start GPS først."); return; }
+
+    const now = Date.now();
+    // less strict when auto-updating
+    const minGap = isAuto ? 2500 : 900;
+    if(now - lastRouteAt < minGap) return;
+    lastRouteAt = now;
+
+    const [uLng,uLat] = userLngLat;
+    const [dLng,dLat] = dest;
+
+    const url =
+      `https://router.project-osrm.org/route/v1/walking/` +
+      `${uLng},${uLat};${dLng},${dLat}` +
+      `?overview=full&geometries=geojson`;
+
+    try{
+      const res = await fetch(url);
+      const data = await res.json();
+      if(!data.routes || !data.routes[0]){
+        setStatus("Fant ingen rute.");
+        return;
+      }
+
+      const route = data.routes[0].geometry;
+      const fc = { type:"FeatureCollection", features:[{ type:"Feature", properties:{}, geometry:route }] };
+      const src = map.getSource("route");
+      if(src) src.setData(fc);
+
+      if(!isAuto){
+        const distM = data.routes[0].distance;
+        const mins = Math.max(1, Math.round(data.routes[0].duration / 60));
+        setStatus(`Waypoint satt. ~${mins} min • ${(distM/1000).toFixed(2)} km`);
+      }
+    } catch(e){
+      if(!isAuto) setStatus("Rute-feil.");
+    }
+  }
+
+  // -----------------------
+  // POI loading (your exact categories)
+  // -----------------------
+  function schedulePOILoad(){
+    if(poiFetchTimer) clearTimeout(poiFetchTimer);
+    poiFetchTimer = setTimeout(loadPOIsInView, 900);
+  }
+
+  function bbox(){
+    const b = map.getBounds();
+    return [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()];
+  }
+
+  function overpassQuery([s,w,n,e]){
+    return `
+[out:json][timeout:20];
 (
- node["amenity"="fast_food"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
- node["amenity"="nightclub"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
- node["shop"="supermarket"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
- node["shop"="convenience"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
- node["shop"="clothes"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
- node["amenity"="fuel"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
- node["amenity"="parking"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
- node["amenity"="bank"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
- node["amenity"="atm"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
- node["amenity"="police"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
- node["amenity"="hospital"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
- node["tourism"="hotel"](${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()});
+  node["amenity"="fast_food"](${s},${w},${n},${e});
+  node["amenity"="nightclub"](${s},${w},${n},${e});
+  node["shop"="supermarket"](${s},${w},${n},${e});
+  node["shop"="convenience"](${s},${w},${n},${e});
+  node["shop"="clothes"](${s},${w},${n},${e});
+  node["amenity"="hospital"](${s},${w},${n},${e});
+  node["amenity"="fuel"](${s},${w},${n},${e});
+  node["amenity"="parking"](${s},${w},${n},${e});
+  node["amenity"="bank"](${s},${w},${n},${e});
+  node["amenity"="atm"](${s},${w},${n},${e});
+  node["amenity"="police"](${s},${w},${n},${e});
+  node["tourism"="hotel"](${s},${w},${n},${e});
 );
-out 40;
-`
- const res=await fetch("https://overpass-api.de/api/interpreter",{method:"POST",body:q})
- const data=await res.json()
- data.elements.forEach(e=>{
-  if(!e.tags||!e.tags.name)return
-  const t=e.tags
-  let type="food"
-  if(t.shop==="clothes")type="clothes"
-  if(t.amenity==="fuel")type="fuel"
-  if(t.amenity==="parking")type="parking"
-  if(t.amenity==="bank"||t.amenity==="atm")type="bank"
-  if(t.amenity==="police")type="police"
-  if(t.amenity==="hospital")type="hospital"
-  if(t.tourism==="hotel")type="hotel"
-  new maplibregl.Marker({element:icon(type)})
-   .setLngLat([e.lon,e.lat]).addTo(map)
- })
-}
+out body 400;
+`;
+  }
 
-map.on("moveend",loadPOI)
+  function haversineMeters(a, b){
+    const toRad = x => x*Math.PI/180;
+    const R = 6371000;
+    const dLat = toRad(b[1]-a[1]);
+    const dLon = toRad(b[0]-a[0]);
+    const lat1 = toRad(a[1]);
+    const lat2 = toRad(b[1]);
+    const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+    return 2*R*Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+
+  function poiKindFromTags(tags){
+    if(tags.amenity === "fast_food") return "fast_food";
+    if(tags.amenity === "nightclub") return "nightclub";
+    if(tags.shop === "supermarket") return "supermarket";
+    if(tags.shop === "convenience") return "convenience";
+    if(tags.shop === "clothes") return "clothes";
+    if(tags.amenity === "hospital") return "hospital";
+    if(tags.amenity === "fuel") return "fuel";
+    if(tags.amenity === "parking") return "parking";
+    if(tags.amenity === "bank") return "bank";
+    if(tags.amenity === "atm") return "atm";
+    if(tags.amenity === "police") return "police";
+    if(tags.tourism === "hotel") return "hotel";
+    return null;
+  }
+
+  function labelFromKind(kind){
+    return ({
+      fast_food:"Fast food",
+      nightclub:"Nightclub",
+      supermarket:"Supermarket",
+      convenience:"Convenience",
+      clothes:"Clothes",
+      hospital:"Hospital",
+      fuel:"Fuel",
+      parking:"Parking",
+      bank:"Bank/ATM",
+      atm:"Bank/ATM",
+      police:"Police",
+      hotel:"Hotel"
+    })[kind] || "POI";
+  }
+
+  function escapeHtml(str){
+    return String(str)
+      .replaceAll('&','&amp;')
+      .replaceAll('<','&lt;')
+      .replaceAll('>','&gt;')
+      .replaceAll('"','&quot;')
+      .replaceAll("'","&#039;");
+  }
+
+  async function loadPOIsInView(){
+    if(map.getZoom() < 14){
+      setPOIStatus("POI: zoom inn (14+)…");
+      return;
+    }
+    if(!userLngLat){
+      setPOIStatus("POI: start GPS for best resultat.");
+      return;
+    }
+
+    if(poiAbort) poiAbort.abort();
+    poiAbort = new AbortController();
+
+    setPOIStatus("POI: laster…");
+
+    try{
+      const q = overpassQuery(bbox());
+      const res = await fetch("https://overpass-api.de/api/interpreter", {
+        method:"POST",
+        body:q,
+        signal: poiAbort.signal,
+        headers: { "Content-Type":"text/plain;charset=UTF-8" }
+      });
+
+      if(!res.ok){
+        setPOIStatus("POI: feil/rate limit.");
+        return;
+      }
+
+      const data = await res.json();
+      const elements = Array.isArray(data.elements) ? data.elements : [];
+
+      // Keep only named + recognized categories
+      let filtered = elements
+        .filter(el => el && el.tags && (el.tags.name || el.tags.brand))
+        .map(el => {
+          const kind = poiKindFromTags(el.tags);
+          return kind ? { el, kind } : null;
+        })
+        .filter(Boolean);
+
+      // Sort by distance to user (no ratings available in OSM)
+      filtered = filtered
+        .map(x => ({ ...x, dist: haversineMeters(userLngLat, [x.el.lon, x.el.lat]) }))
+        .sort((a,b) => a.dist - b.dist);
+
+      // Hard cap to avoid lag
+      const MAX_POI = 40;
+      filtered = filtered.slice(0, MAX_POI);
+
+      const seen = new Set(filtered.map(x => `n${x.el.id}`));
+
+      // Remove markers no longer in list
+      for(const [id, marker] of poiMarkers.entries()){
+        if(!seen.has(id)){
+          marker.remove();
+          poiMarkers.delete(id);
+        }
+      }
+
+      // Add missing markers
+      for(const item of filtered){
+        const el = item.el;
+        const id = `n${el.id}`;
+        if(poiMarkers.has(id)) continue;
+
+        const name = el.tags.name || el.tags.brand;
+        const kind = item.kind;
+        const label = labelFromKind(kind);
+
+        const m = new maplibregl.Marker({ element: createPOIEl(kind) })
+          .setLngLat([el.lon, el.lat])
+          .addTo(map);
+
+        // Popup on POI click; stop waypoint set
+        m.getElement().addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          new maplibregl.Popup({ closeButton:true, closeOnClick:true })
+            .setLngLat([el.lon, el.lat])
+            .setHTML(`
+              <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;font-size:13px">
+                <div style="font-weight:800;margin-bottom:4px">${escapeHtml(name)}</div>
+                <div style="opacity:.75">${escapeHtml(label)}</div>
+              </div>
+            `)
+            .addTo(map);
+        });
+
+        poiMarkers.set(id, m);
+      }
+
+      setPOIStatus(`POI: viser ${filtered.length} (nærmest deg).`);
+    } catch(e){
+      if(e.name === "AbortError") return;
+      setPOIStatus("POI: feil.");
+    }
+  }
 </script>
 </body>
 </html>
