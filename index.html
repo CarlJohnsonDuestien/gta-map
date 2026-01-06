@@ -13,62 +13,62 @@
     html, body { height: 100%; margin: 0; }
     #map { height: 100%; width: 100%; }
 
+    /* Litt mer “game”-look */
+    #map {
+      filter: saturate(0.9) contrast(1.15) brightness(0.95);
+    }
+
     .hud {
       position: absolute;
       left: 12px;
       top: 12px;
       z-index: 10;
 
-      background: rgba(0,0,0,0.60);
+      background: rgba(0,0,0,0.62);
       color: #fff;
       padding: 10px 12px;
       border-radius: 12px;
 
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
       font-size: 14px;
-      max-width: 320px;
-      backdrop-filter: blur(6px);
+      max-width: 340px;
+      backdrop-filter: blur(7px);
+      border: 1px solid rgba(255,255,255,0.10);
     }
 
-    .hud .title {
-      font-weight: 700;
-      margin-bottom: 4px;
-    }
-
-    .hud .row {
-      display: flex;
-      gap: 8px;
-      margin-top: 8px;
-    }
-
+    .hud .title { font-weight: 800; margin-bottom: 4px; letter-spacing: 0.2px; }
+    .hud .row { display: flex; gap: 8px; margin-top: 8px; }
     .hud button {
       flex: 1;
       padding: 10px 12px;
       border: 0;
       border-radius: 10px;
       cursor: pointer;
-      font-weight: 600;
+      font-weight: 700;
     }
-
-    /* Litt GTA-ish knapper */
     .btn-primary { background: #e5e7eb; color: #111827; }
-    .btn-danger  { background: #ef4444; color: #ffffff; }
     .btn-muted   { background: rgba(255,255,255,0.12); color: #ffffff; border: 1px solid rgba(255,255,255,0.18); }
+    .hint { margin-top: 8px; font-size: 12px; opacity: 0.85; line-height: 1.35; }
+    .attrib { margin-top: 8px; font-size: 12px; opacity: 0.75; }
 
-    .hint {
-      margin-top: 8px;
-      font-size: 12px;
-      opacity: 0.85;
-      line-height: 1.3;
+    /* Custom marker wrappers */
+    .marker-wrap {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      transform-origin: 50% 50%;
+      user-select: none;
+    }
+    .marker-shadow {
+      filter: drop-shadow(0 2px 2px rgba(0,0,0,0.55));
     }
 
-    .attrib {
-      margin-top: 8px;
-      font-size: 12px;
-      opacity: 0.75;
-    }
+    /* Make waypoint “pop” above route */
+    .waypoint { width: 36px; height: 36px; }
   </style>
 </head>
+
 <body>
   <div id="map"></div>
 
@@ -87,37 +87,94 @@
     </div>
 
     <div class="attrib">
-      Kart: © OpenStreetMap contributors
+      Kart: © OpenStreetMap contributors • Basemap: © CARTO
     </div>
   </div>
 
   <script>
-    // Gratis kartfliser (OSM). For prototype. Ikke for stor trafikk.
+    // --- SVG markers (inspirert, ikke kopiert) ---
+    function createUserArrowEl() {
+      const el = document.createElement('div');
+      el.className = 'marker-wrap marker-shadow';
+      el.innerHTML = `
+        <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+          <!-- outline -->
+          <path d="M13 2 L23 22 L13 18 L3 22 Z"
+                fill="rgba(0,0,0,0.55)"/>
+          <!-- arrow -->
+          <path d="M13 3.5 L21.5 21 L13 17.4 L4.5 21 Z"
+                fill="#ffffff"/>
+          <!-- tiny center cut for “pointer” feel -->
+          <path d="M13 7.4 L16.1 16.4 L13 15.2 L9.9 16.4 Z"
+                fill="rgba(0,0,0,0.18)"/>
+        </svg>
+      `;
+      return el;
+    }
+
+    function createWaypointEl() {
+      const el = document.createElement('div');
+      el.className = 'marker-wrap marker-shadow waypoint';
+      el.innerHTML = `
+        <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true">
+          <!-- 4-petal “flower/clover” -->
+          <g fill="none" stroke="#a855f7" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 7
+                     C12.2 7, 10 9.2, 10 12
+                     C10 14.8, 12.2 17, 15 17
+                     C17.8 17, 20 14.8, 20 12
+                     C20 9.2, 17.8 7, 15 7Z"/>
+            <path d="M15 13
+                     C12.2 13, 10 15.2, 10 18
+                     C10 20.8, 12.2 23, 15 23
+                     C17.8 23, 20 20.8, 20 18
+                     C20 15.2, 17.8 13, 15 13Z"/>
+            <path d="M7 15
+                     C7 12.2, 9.2 10, 12 10
+                     C14.8 10, 17 12.2, 17 15
+                     C17 17.8, 14.8 20, 12 20
+                     C9.2 20, 7 17.8, 7 15Z"/>
+            <path d="M13 15
+                     C13 12.2, 15.2 10, 18 10
+                     C20.8 10, 23 12.2, 23 15
+                     C23 17.8, 20.8 20, 18 20
+                     C15.2 20, 13 17.8, 13 15Z"/>
+            <!-- center -->
+            <circle cx="15" cy="15" r="2.2" />
+          </g>
+        </svg>
+      `;
+      return el;
+    }
+
+    // --- Map setup (mørkt kart) ---
     const map = new maplibregl.Map({
       container: 'map',
       style: {
         version: 8,
         sources: {
-          osm: {
+          basemap: {
             type: 'raster',
             tiles: [
-              'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-              'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-              'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
+              'https://a.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
+              'https://b.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
+              'https://c.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png',
+              'https://d.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}.png'
             ],
             tileSize: 256,
-            attribution: '© OpenStreetMap contributors'
+            attribution: '© OpenStreetMap contributors © CARTO'
           }
         },
-        layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+        layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }]
       },
-      center: [10.7522, 59.9139], // Oslo som start
+      center: [10.7522, 59.9139],
       zoom: 13
     });
 
-    let userMarker = null;
     let watchId = null;
     let userLngLat = null;
+    let userMarker = null;
+    let userArrowEl = null;
 
     let destMarker = null;
     let lastRouteAt = 0;
@@ -128,20 +185,6 @@
 
     function setStatus(msg) { statusEl.textContent = msg; }
 
-    function clearRouteAndWaypoint() {
-      // Fjern waypoint-marker
-      if (destMarker) {
-        destMarker.remove();
-        destMarker = null;
-      }
-      // Tøm rute-linje
-      const src = map.getSource('route');
-      if (src) {
-        src.setData({ type: 'FeatureCollection', features: [] });
-      }
-      setStatus('Waypoint fjernet. Trykk på kartet for ny waypoint.');
-    }
-
     map.on('load', () => {
       // Kilde for rute-linja
       map.addSource('route', {
@@ -149,30 +192,42 @@
         data: { type: 'FeatureCollection', features: [] }
       });
 
-      // Lilla GTA-linje
-      map.addLayer({
-        id: 'route-line',
-        type: 'line',
-        source: 'route',
-        paint: {
-          'line-width': 6,
-          'line-opacity': 0.92,
-          'line-color': '#a855f7'
-        }
-      });
-
-      // Litt "glow" under (tykkere og mer transparent)
+      // “Glow” under
       map.addLayer({
         id: 'route-glow',
         type: 'line',
         source: 'route',
         paint: {
-          'line-width': 12,
-          'line-opacity': 0.25,
+          'line-width': 14,
+          'line-opacity': 0.22,
           'line-color': '#a855f7'
         }
-      }, 'route-line'); // legg under
+      });
+
+      // Selve ruta (litt “neon”)
+      map.addLayer({
+        id: 'route-line',
+        type: 'line',
+        source: 'route',
+        paint: {
+          'line-width': 7,
+          'line-opacity': 0.92,
+          'line-color': '#a855f7'
+        }
+      });
     });
+
+    function clearRouteAndWaypoint() {
+      if (destMarker) {
+        destMarker.remove();
+        destMarker = null;
+      }
+      const src = map.getSource('route');
+      if (src) src.setData({ type: 'FeatureCollection', features: [] });
+      setStatus('Waypoint fjernet. Trykk på kartet for ny waypoint.');
+    }
+
+    clearBtn.addEventListener('click', clearRouteAndWaypoint);
 
     gpsBtn.addEventListener('click', () => {
       if (!navigator.geolocation) {
@@ -195,18 +250,30 @@
         (pos) => {
           const lng = pos.coords.longitude;
           const lat = pos.coords.latitude;
-
           userLngLat = [lng, lat];
+
+          // Heading kan være null på mange mobiler – vi håndterer det pent
+          const heading = (typeof pos.coords.heading === 'number' && !Number.isNaN(pos.coords.heading))
+            ? pos.coords.heading
+            : null;
 
           setStatus(`Du er her: ${lat.toFixed(5)}, ${lng.toFixed(5)} (trykk på kartet for waypoint)`);
 
           if (!userMarker) {
-            userMarker = new maplibregl.Marker({ color: '#2f80ff' })
+            userArrowEl = createUserArrowEl();
+            userMarker = new maplibregl.Marker({ element: userArrowEl })
               .setLngLat([lng, lat])
               .addTo(map);
+
             map.flyTo({ center: [lng, lat], zoom: 16 });
           } else {
             userMarker.setLngLat([lng, lat]);
+          }
+
+          // Roter pil hvis vi har heading
+          if (userArrowEl && heading !== null) {
+            // heading = grader fra nord (0 = nord). SVG peker “opp” allerede.
+            userArrowEl.style.transform = `rotate(${heading}deg)`;
           }
         },
         (err) => {
@@ -222,17 +289,13 @@
       );
     });
 
-    clearBtn.addEventListener('click', () => {
-      clearRouteAndWaypoint();
-    });
-
     async function drawRouteTo(destLngLat) {
       if (!userLngLat) {
         setStatus('Start GPS først, så sett waypoint.');
         return;
       }
 
-      // enkel rate-limit så du ikke spammer routing
+      // enkel rate-limit
       const now = Date.now();
       if (now - lastRouteAt < 1200) return;
       lastRouteAt = now;
@@ -240,7 +303,7 @@
       const [uLng, uLat] = userLngLat;
       const [dLng, dLat] = destLngLat;
 
-      // Gratis OSRM demo. Funker fint til prototype, men kan rate-limite ved mye trafikk.
+      // OSRM: kun rute-geometri (walking)
       const url =
         `https://router.project-osrm.org/route/v1/walking/` +
         `${uLng},${uLat};${dLng},${dLat}` +
@@ -267,20 +330,19 @@
 
         const distM = data.routes[0].distance;
         const mins = Math.max(1, Math.round(data.routes[0].duration / 60));
-
         setStatus(`Waypoint satt. ~${mins} min • ${(distM/1000).toFixed(2)} km`);
       } catch (e) {
         setStatus('Rute-feil: ' + e.message);
       }
     }
 
-    // Trykk på kartet for waypoint + rute
+    // Klikk = waypoint + rute
     map.on('click', (e) => {
       const dest = [e.lngLat.lng, e.lngLat.lat];
 
-      // Lag/flytt waypoint-marker (oransje)
       if (!destMarker) {
-        destMarker = new maplibregl.Marker({ color: '#f59e0b' })
+        const wpEl = createWaypointEl();
+        destMarker = new maplibregl.Marker({ element: wpEl })
           .setLngLat(dest)
           .addTo(map);
       } else {
