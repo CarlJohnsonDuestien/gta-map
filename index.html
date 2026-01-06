@@ -13,7 +13,6 @@
     html, body { height: 100%; margin: 0; }
     #map { height: 100%; width: 100%; }
 
-    /* HUD */
     .hud {
       position: absolute;
       left: 12px;
@@ -27,7 +26,7 @@
 
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
       font-size: 14px;
-      max-width: 360px;
+      max-width: 380px;
       backdrop-filter: blur(7px);
       border: 1px solid rgba(255,255,255,0.10);
     }
@@ -47,6 +46,7 @@
 
     .hint { margin-top: 8px; font-size: 12px; opacity: 0.85; line-height: 1.35; }
     .attrib { margin-top: 8px; font-size: 12px; opacity: 0.75; }
+    .small { font-size: 12px; opacity: 0.85; margin-top: 6px; }
 
     /* Custom markers */
     .marker-wrap {
@@ -62,10 +62,16 @@
     }
     .waypoint { width: 36px; height: 36px; }
 
-    /* Fjerner MapLibre sin logo-knapp hvis du vil (valgfritt):
-       NB: attribution må stå, så vi lar attribution være.
-    */
-    /* .maplibregl-ctrl-logo { display: none !important; } */
+    /* POI icons */
+    .poi {
+      width: 26px;
+      height: 26px;
+    }
+
+    /* Make POIs easier to tap */
+    .poi svg { overflow: visible; }
+
+    /* Optional: keep attribution visible (required) */
   </style>
 </head>
 
@@ -74,7 +80,7 @@
 
   <div class="hud">
     <div class="title">GTA-ish Map</div>
-    <div id="status">Trykk “Start GPS”, så dobbel-trykk på kartet for waypoint.</div>
+    <div id="status">Trykk “Start GPS”, så trykk på kartet for waypoint.</div>
 
     <div class="row">
       <button id="gpsBtn" class="btn-primary">Start GPS</button>
@@ -82,17 +88,22 @@
     </div>
 
     <div class="hint">
-      • Dobbel-trykk på kartet for waypoint<br/>
-      • Lilla linje følger veiene (ingen navigasjon)
+      • Trykk på kartet for waypoint<br/>
+      • Lilla linje følger veiene (ingen navigasjon)<br/>
+      • POI-ikoner lastes når du zoomer inn
     </div>
 
+    <div id="poiStatus" class="small">POI: zoom inn (14+) for å laste steder.</div>
+
     <div class="attrib">
-      Kart: © OpenStreetMap contributors • Basemap: © CARTO
+      Kartdata: © OpenStreetMap contributors • Basemap: © CARTO
     </div>
   </div>
 
   <script>
-    // --- SVG markers (inspirert) ---
+    // -----------------------
+    // SVG: user arrow + waypoint + POI icons
+    // -----------------------
     function createUserArrowEl() {
       const el = document.createElement('div');
       el.className = 'marker-wrap marker-shadow';
@@ -123,8 +134,93 @@
       return el;
     }
 
-    // --- Map setup ---
-    // CARTO "voyager_nolabels" = lys, uten tekst, og veier er tydeligere enn på helt mørke kart.
+    // Simple GTA-ish POI icon set (SVG). Inspired, not copied.
+    function poiIcon(kind) {
+      // Kind color: keep GTA-ish: white icon, thin outline, category tint
+      const tint = {
+        food: "#ffffff",
+        drink: "#ffffff",
+        store: "#ffffff",
+        fuel: "#ffffff",
+        health: "#ffffff",
+        bank: "#ffffff",
+        parking: "#ffffff",
+        police: "#ffffff",
+        post: "#ffffff",
+        hotel: "#ffffff",
+        default: "#ffffff"
+      }[kind] || "#ffffff";
+
+      const bg = {
+        food: "#16a34a",     // green
+        drink: "#9333ea",    // purple
+        store: "#2563eb",    // blue
+        fuel: "#f59e0b",     // orange
+        health: "#ef4444",   // red
+        bank: "#111827",     // dark
+        parking: "#0ea5e9",  // cyan
+        police: "#334155",   // slate
+        post: "#f97316",     // orange2
+        hotel: "#a16207",    // brown
+        default: "#111827"
+      }[kind] || "#111827";
+
+      // icons: minimal symbols
+      const glyphs = {
+        food: `<path d="M8 6h2v12H8zM14 6h2v12h-2zM20 6h2v12h-2z" />`, // fork-ish bars
+        drink:`<path d="M9 7h12l-2 5v6a3 3 0 0 1-3 3h-2a3 3 0 0 1-3-3v-6z" />`,
+        store:`<path d="M7 10h16v11H7z"/><path d="M9 10l2-4h8l2 4" fill="none" stroke="currentColor" stroke-width="2"/>`,
+        fuel: `<path d="M9 7h9v14H9z"/><path d="M18 10h3v6a3 3 0 0 0 3 3" fill="none" stroke="currentColor" stroke-width="2"/>`,
+        health:`<path d="M13 7h4v4h4v4h-4v4h-4v-4H9v-4h4z"/>`,
+        bank: `<path d="M7 11h16v10H7z"/><path d="M7 11l8-5 8 5" fill="none" stroke="currentColor" stroke-width="2"/>`,
+        parking:`<path d="M10 7h6a5 5 0 0 1 0 10h-6z"/><path d="M10 7v16" fill="none" stroke="currentColor" stroke-width="2"/>`,
+        police:`<path d="M15 6l8 3v6c0 5-4 9-8 10-4-1-8-5-8-10V9z"/><path d="M15 10v9" fill="none" stroke="currentColor" stroke-width="2"/>`,
+        post:`<path d="M6 10h18v12H6z"/><path d="M6 10l9 7 9-7" fill="none" stroke="currentColor" stroke-width="2"/>`,
+        hotel:`<path d="M8 8h6v14H8zM16 12h6v10h-6z"/><path d="M16 10h6" fill="none" stroke="currentColor" stroke-width="2"/>`,
+        default:`<circle cx="15" cy="15" r="7"/>`
+      }[kind] || `<circle cx="15" cy="15" r="7"/>`;
+
+      const el = document.createElement('div');
+      el.className = 'marker-wrap marker-shadow poi';
+      el.innerHTML = `
+        <svg width="26" height="26" viewBox="0 0 30 30" aria-hidden="true">
+          <circle cx="15" cy="15" r="13" fill="${bg}" opacity="0.92"></circle>
+          <circle cx="15" cy="15" r="13" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1.5"></circle>
+          <g fill="${tint}" stroke="none" transform="translate(0,0)">
+            ${glyphs}
+          </g>
+        </svg>
+      `;
+      return el;
+    }
+
+    function classifyPOI(tags) {
+      const a = tags.amenity;
+      const s = tags.shop;
+      const t = tags.tourism;
+
+      if (a === 'restaurant' || a === 'fast_food' || a === 'cafe') return { kind: 'food', label: 'Mat' };
+      if (a === 'bar' || a === 'pub' || a === 'nightclub') return { kind: 'drink', label: 'Bar' };
+
+      if (a === 'fuel') return { kind: 'fuel', label: 'Bensin' };
+      if (a === 'pharmacy' || a === 'hospital' || a === 'clinic' || a === 'doctors') return { kind: 'health', label: 'Helse' };
+
+      if (a === 'bank' || a === 'atm') return { kind: 'bank', label: 'Bank' };
+      if (a === 'parking') return { kind: 'parking', label: 'Parkering' };
+      if (a === 'police') return { kind: 'police', label: 'Politi' };
+      if (a === 'post_office') return { kind: 'post', label: 'Post' };
+
+      if (t === 'hotel' || t === 'hostel' || t === 'motel') return { kind: 'hotel', label: 'Hotell' };
+
+      if (s) return { kind: 'store', label: 'Butikk' };
+      if (a === 'supermarket' || a === 'convenience') return { kind: 'store', label: 'Butikk' };
+
+      return { kind: 'default', label: 'Sted' };
+    }
+
+    // -----------------------
+    // Map (lys, uten labels)
+    // -----------------------
     const map = new maplibregl.Map({
       container: 'map',
       style: {
@@ -148,9 +244,9 @@
       zoom: 13
     });
 
-    // Viktig: Dobbelklikk brukes til waypoint, så vi skrur av default zoom på dblclick
-    map.doubleClickZoom.disable();
-
+    // -----------------------
+    // State
+    // -----------------------
     let watchId = null;
     let userLngLat = null;
     let userMarker = null;
@@ -159,19 +255,28 @@
     let destMarker = null;
     let lastRouteAt = 0;
 
+    // POI state
+    const poiMarkers = new Map(); // id -> marker
+    let poiFetchTimer = null;
+    let poiAbort = null;
+
     const statusEl = document.getElementById('status');
+    const poiStatusEl = document.getElementById('poiStatus');
     const gpsBtn = document.getElementById('gpsBtn');
     const clearBtn = document.getElementById('clearBtn');
 
     function setStatus(msg) { statusEl.textContent = msg; }
+    function setPOIStatus(msg) { poiStatusEl.textContent = msg; }
 
+    // -----------------------
+    // Route layer
+    // -----------------------
     map.on('load', () => {
       map.addSource('route', {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] }
       });
 
-      // Glow under ruta
       map.addLayer({
         id: 'route-glow',
         type: 'line',
@@ -183,7 +288,6 @@
         }
       });
 
-      // Rute-linja
       map.addLayer({
         id: 'route-line',
         type: 'line',
@@ -194,20 +298,24 @@
           'line-color': '#a855f7'
         }
       });
+
+      // Load POIs as you move (debounced)
+      map.on('moveend', schedulePOILoad);
+      setPOIStatus('POI: zoom inn (14+) for å laste steder.');
     });
 
     function clearRouteAndWaypoint() {
-      if (destMarker) {
-        destMarker.remove();
-        destMarker = null;
-      }
+      if (destMarker) { destMarker.remove(); destMarker = null; }
       const src = map.getSource('route');
       if (src) src.setData({ type: 'FeatureCollection', features: [] });
-      setStatus('Waypoint fjernet. Dobbel-trykk på kartet for ny waypoint.');
+      setStatus('Waypoint fjernet. Trykk på kartet for ny waypoint.');
     }
 
     clearBtn.addEventListener('click', clearRouteAndWaypoint);
 
+    // -----------------------
+    // GPS
+    // -----------------------
     gpsBtn.addEventListener('click', () => {
       if (!navigator.geolocation) {
         setStatus('GPS støttes ikke i denne nettleseren.');
@@ -235,14 +343,13 @@
             ? pos.coords.heading
             : null;
 
-          setStatus(`Du er her: ${lat.toFixed(5)}, ${lng.toFixed(5)} (dobbel-trykk for waypoint)`);
+          setStatus(`Du er her: ${lat.toFixed(5)}, ${lng.toFixed(5)} (trykk på kartet for waypoint)`);
 
           if (!userMarker) {
             userArrowEl = createUserArrowEl();
             userMarker = new maplibregl.Marker({ element: userArrowEl })
               .setLngLat([lng, lat])
               .addTo(map);
-
             map.flyTo({ center: [lng, lat], zoom: 16 });
           } else {
             userMarker.setLngLat([lng, lat]);
@@ -251,18 +358,35 @@
           if (userArrowEl && heading !== null) {
             userArrowEl.style.transform = `rotate(${heading}deg)`;
           }
+
+          // After GPS start, POIs will be more relevant when zoomed in
+          schedulePOILoad();
         },
         (err) => {
           setStatus('GPS-feil: ' + err.message);
           gpsBtn.textContent = 'Start GPS';
           watchId = null;
         },
-        {
-          enableHighAccuracy: true,
-          maximumAge: 1000,
-          timeout: 10000
-        }
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 10000 }
       );
+    });
+
+    // -----------------------
+    // Waypoint on single click
+    // -----------------------
+    map.on('click', (e) => {
+      const dest = [e.lngLat.lng, e.lngLat.lat];
+
+      if (!destMarker) {
+        const wpEl = createWaypointEl();
+        destMarker = new maplibregl.Marker({ element: wpEl })
+          .setLngLat(dest)
+          .addTo(map);
+      } else {
+        destMarker.setLngLat(dest);
+      }
+
+      drawRouteTo(dest);
     });
 
     async function drawRouteTo(destLngLat) {
@@ -310,21 +434,145 @@
       }
     }
 
-    // DOBBEL-TRYKK = waypoint + rute
-    map.on('dblclick', (e) => {
-      const dest = [e.lngLat.lng, e.lngLat.lat];
+    // -----------------------
+    // POIs from OSM (Overpass)
+    // -----------------------
+    function schedulePOILoad() {
+      if (!map || !map.getZoom) return;
 
-      if (!destMarker) {
-        const wpEl = createWaypointEl();
-        destMarker = new maplibregl.Marker({ element: wpEl })
-          .setLngLat(dest)
-          .addTo(map);
-      } else {
-        destMarker.setLngLat(dest);
+      if (poiFetchTimer) clearTimeout(poiFetchTimer);
+      poiFetchTimer = setTimeout(loadPOIsInView, 900);
+    }
+
+    function viewBBox() {
+      const b = map.getBounds();
+      // Overpass expects: south,west,north,east
+      return [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()];
+    }
+
+    function overpassQuery(bbox) {
+      const [s, w, n, e] = bbox;
+
+      // Keep it bounded. Pull only useful public POIs.
+      // Note: we're limiting to nodes for speed; ways/relations are heavier.
+      return `
+[out:json][timeout:20];
+(
+  node["amenity"~"^(restaurant|fast_food|cafe|bar|pub|nightclub|fuel|pharmacy|hospital|clinic|doctors|bank|atm|parking|police|post_office|supermarket|convenience)$"](${s},${w},${n},${e});
+  node["shop"](${s},${w},${n},${e});
+  node["tourism"~"^(hotel|hostel|motel)$"](${s},${w},${n},${e});
+);
+out body 250;
+`;
+    }
+
+    async function loadPOIsInView() {
+      const z = map.getZoom();
+
+      // Don’t hammer Overpass. Only load when zoomed in.
+      if (z < 14) {
+        setPOIStatus('POI: zoom inn (14+) for å laste steder.');
+        // Optional: could clear markers when zoomed out
+        return;
       }
 
-      drawRouteTo(dest);
-    });
+      // Abort previous
+      if (poiAbort) poiAbort.abort();
+      poiAbort = new AbortController();
+
+      const bbox = viewBBox();
+
+      setPOIStatus('POI: laster…');
+
+      try {
+        const q = overpassQuery(bbox);
+        const url = 'https://overpass-api.de/api/interpreter';
+
+        const res = await fetch(url, {
+          method: 'POST',
+          body: q,
+          signal: poiAbort.signal,
+          headers: { 'Content-Type': 'text/plain;charset=UTF-8' }
+        });
+
+        if (!res.ok) {
+          setPOIStatus('POI: feil (Overpass rate limit/feil). Prøv igjen.');
+          return;
+        }
+
+        const data = await res.json();
+        const elements = Array.isArray(data.elements) ? data.elements : [];
+
+        // Limit how many we render
+        const maxRender = 180;
+        const slice = elements.slice(0, maxRender);
+
+        // Track which IDs are in view, to remove old ones
+        const seen = new Set();
+
+        for (const el of slice) {
+          if (!el || typeof el.id !== 'number') continue;
+          if (typeof el.lat !== 'number' || typeof el.lon !== 'number') continue;
+
+          const id = `n${el.id}`;
+          seen.add(id);
+
+          if (poiMarkers.has(id)) continue;
+
+          const tags = el.tags || {};
+          const name = tags.name || tags.brand || '(uten navn)';
+          const { kind, label } = classifyPOI(tags);
+
+          const iconEl = poiIcon(kind);
+
+          const m = new maplibregl.Marker({ element: iconEl })
+            .setLngLat([el.lon, el.lat])
+            .addTo(map);
+
+          // Simple popup on tap
+          const popupHtml = `
+            <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; font-size: 13px;">
+              <div style="font-weight:700; margin-bottom:4px;">${escapeHtml(name)}</div>
+              <div style="opacity:0.8;">${escapeHtml(label)}</div>
+            </div>
+          `;
+          m.getElement().addEventListener('click', (ev) => {
+            ev.stopPropagation(); // don't also set waypoint
+            new maplibregl.Popup({ closeButton: true, closeOnClick: true })
+              .setLngLat([el.lon, el.lat])
+              .setHTML(popupHtml)
+              .addTo(map);
+          });
+
+          poiMarkers.set(id, m);
+        }
+
+        // Remove markers that are no longer in current result set (optional cleanup)
+        // Keep it mild: only remove if we have too many.
+        if (poiMarkers.size > 260) {
+          for (const [id, marker] of poiMarkers.entries()) {
+            if (!seen.has(id)) {
+              marker.remove();
+              poiMarkers.delete(id);
+            }
+          }
+        }
+
+        setPOIStatus(`POI: viser ${Math.min(slice.length, maxRender)} steder (OSM).`);
+      } catch (e) {
+        if (e.name === 'AbortError') return;
+        setPOIStatus('POI: feil. Prøv zoom/refresh.');
+      }
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
   </script>
 </body>
 </html>
