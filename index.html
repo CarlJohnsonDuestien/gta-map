@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="no">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GTA-ish Map</title>
+
+  <!-- MapLibre (kartmotor) -->
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #map { height: 100%; width: 100%; }
+    .hud {
+      position: absolute; left: 12px; top: 12px; z-index: 10;
+      background: rgba(0,0,0,0.6); color: #fff; padding: 10px 12px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      border-radius: 10px; font-size: 14px;
+      max-width: 280px;
+    }
+    .hud button {
+      margin-top: 8px; width: 100%; padding: 10px;
+      border: 0; border-radius: 8px; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="hud">
+    <div><b>GTA-ish Map</b></div>
+    <div id="status">Trykk “Start GPS”.</div>
+    <button id="gpsBtn">Start GPS</button>
+    <div style="margin-top:8px; font-size:12px; opacity:.8;">
+      Kart: © OpenStreetMap contributors
+    </div>
+  </div>
+
+  <script>
+    // Gratis kartfliser (OSM). For demo/prototype. Ikke for stor trafikk.
+    const map = new maplibregl.Map({
+      container: 'map',
+      style: {
+        version: 8,
+        sources: {
+          osm: {
+            type: 'raster',
+            tiles: [
+              'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+              'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+              'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png'
+            ],
+            tileSize: 256,
+            attribution: '© OpenStreetMap contributors'
+          }
+        },
+        layers: [{ id: 'osm', type: 'raster', source: 'osm' }]
+      },
+      center: [10.7522, 59.9139], // Oslo som start
+      zoom: 13
+    });
+
+    let userMarker = null;
+    let watchId = null;
+
+    const statusEl = document.getElementById('status');
+    const gpsBtn = document.getElementById('gpsBtn');
+
+    function setStatus(msg) { statusEl.textContent = msg; }
+
+    gpsBtn.addEventListener('click', async () => {
+      if (!navigator.geolocation) {
+        setStatus('GPS støttes ikke i denne nettleseren.');
+        return;
+      }
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        gpsBtn.textContent = 'Start GPS';
+        setStatus('GPS stoppet.');
+        return;
+      }
+
+      setStatus('Ber om posisjon...');
+      gpsBtn.textContent = 'Stop GPS';
+
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const lng = pos.coords.longitude;
+          const lat = pos.coords.latitude;
+
+          setStatus(`Du er her: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+
+          if (!userMarker) {
+            userMarker = new maplibregl.Marker({ color: '#2f80ff' })
+              .setLngLat([lng, lat])
+              .addTo(map);
+            map.flyTo({ center: [lng, lat], zoom: 16 });
+          } else {
+            userMarker.setLngLat([lng, lat]);
+          }
+        },
+        (err) => {
+          setStatus('GPS-feil: ' + err.message);
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 1000,
+          timeout: 10000
+        }
+      );
+    });
+  </script>
+</body>
+</html>
