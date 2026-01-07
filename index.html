@@ -35,8 +35,7 @@
 
     .marker-wrap { display:grid; place-items:center; user-select:none; }
     .shadow { filter: drop-shadow(0 2px 2px rgba(0,0,0,0.55)); }
-
-    .poi { width:26px; height:26px; }
+    .poi { width:26px; height:26px; }      /* juster størrelse her */
     .userpin { width:26px; height:26px; }
     .waypoint { width:34px; height:34px; }
 
@@ -66,30 +65,24 @@
     </div>
 
     <div id="poiStatus" class="small">POI: zoom inn (14+)…</div>
-
     <div class="attrib">© OpenStreetMap contributors • Basemap © CARTO • Routing: OSRM</div>
   </div>
 
 <script>
   // -----------------------
-  // EXACT icons you sent (real base64)
+  // Icons from files (NEW)
+  // Place folder "icons/" next to this HTML file.
   // -----------------------
   const ICONS = {
-    nightclub: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAEAAQAMBIgACEQEDEQH/xAAbAAEAAgMBAQAAAAAAAAAAAAAABQYBBAcDAv/EAD4QAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APVKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
-
-    store_fuel_convenience_supermarket: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAEAAQAMBIgACEQEDEQH/xAAbAAEAAgMBAQAAAAAAAAAAAAAABQYBBAcDAv/EADoQAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APVKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
-
-    clothes: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAEAAQAMBIgACEQEDEQH/xAAbAAEAAgMBAQAAAAAAAAAAAAAABQYBBAcDAv/EADoQAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APVKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
-
-    hospital: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAOEA4QMBIgACEQEDEQH/xAAbAAABBQEBAAAAAAAAAAAAAAAEAAIDBQYBB//EADwQAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APqkqKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
-
-    parking: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAEAAQAMBIgACEQEDEQH/xAAbAAEAAgMBAQAAAAAAAAAAAAAABQYBBAcDAv/EADoQAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APVKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
-
-    police: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAOEA4QMBIgACEQEDEQH/xAAbAAACAwEBAQAAAAAAAAAAAAAEBQADBgIBB//EAD0QAAIBAgQDBgQEBQQDAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APqkqKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
-
-    fast_food: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAOEA4QMBIgACEQEDEQH/xAAbAAABBQEBAAAAAAAAAAAAAAAEAAIDBQYBB//EADoQAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APqkqKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
-
-    bank: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAEAAQAMBIgACEQEDEQH/xAAbAAEAAgMBAQAAAAAAAAAAAAAABQYBBAcDAv/EADoQAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APVKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z"
+    nightclub: "./icons/nightclub.png",
+    storeFuelConvenienceSupermarket: "./icons/gas_shop.png",
+    clothes: "./icons/clothes.png",
+    hospital: "./icons/hospital.png",
+    parking: "./icons/parking.png",
+    police: "./icons/police.png",
+    fast_food: "./icons/fastfood.png",
+    bank: "./icons/bank_atm.png"
+    // hotel.png exists in your zip, but not used by POI query yet
   };
 
   // -----------------------
@@ -102,15 +95,15 @@
     return d;
   }
 
-  function createImgMarker(dataUri, cls){
+  function createImgMarker(src){
     const img = document.createElement("img");
     img.className = "poi-img";
-    img.src = dataUri;
+    img.src = src;
     img.alt = "";
-    return wrapEl(img, cls);
+    return img;
   }
 
-  // Keep your user + waypoint:
+  // Keep user arrow + purple waypoint
   function createUserArrowEl(){
     const el = document.createElement('div');
     el.className = 'marker-wrap shadow userpin';
@@ -203,6 +196,7 @@
   let destLngLat = null;
   let lastRouteAt = 0;
 
+  // POI markers with cleanup
   const poiMarkers = new Map(); // id -> marker
   let poiFetchTimer = null;
   let poiAbort = null;
@@ -219,7 +213,9 @@
   }
   clearBtn.addEventListener("click", clearRouteAndWaypoint);
 
+  // -----------------------
   // GPS toggle
+  // -----------------------
   gpsBtn.addEventListener("click", () => {
     if(!navigator.geolocation){
       setStatus("GPS støttes ikke.");
@@ -274,7 +270,9 @@
     );
   });
 
+  // -----------------------
   // Waypoint on click
+  // -----------------------
   map.on("click", (e) => {
     const ll = [e.lngLat.lng, e.lngLat.lat];
     destLngLat = ll;
@@ -329,7 +327,9 @@
     }
   }
 
-  // POI loading
+  // -----------------------
+  // POI loading (only your categories + bank/atm)
+  // -----------------------
   function schedulePOILoad(){
     if(poiFetchTimer) clearTimeout(poiFetchTimer);
     poiFetchTimer = setTimeout(loadPOIsInView, 900);
@@ -359,7 +359,7 @@
   node["amenity"="bank"](${s},${w},${n},${e});
   node["amenity"="atm"](${s},${w},${n},${e});
 );
-out body 500;
+out body 600;
 `;
   }
 
@@ -378,17 +378,16 @@ out body 500;
     if(tags.amenity === "fast_food") return "fast_food";
     if(tags.amenity === "nightclub") return "nightclub";
 
-    if(tags.shop === "supermarket") return "store_fuel_convenience_supermarket";
-    if(tags.shop === "convenience") return "store_fuel_convenience_supermarket";
-    if(tags.amenity === "fuel") return "store_fuel_convenience_supermarket";
+    if(tags.shop === "supermarket") return "storeFuelConvenienceSupermarket";
+    if(tags.shop === "convenience") return "storeFuelConvenienceSupermarket";
+    if(tags.amenity === "fuel") return "storeFuelConvenienceSupermarket";
 
     if(tags.shop === "clothes") return "clothes";
     if(tags.amenity === "hospital") return "hospital";
     if(tags.amenity === "parking") return "parking";
     if(tags.amenity === "police") return "police";
 
-    if(tags.amenity === "bank") return "bank";
-    if(tags.amenity === "atm") return "bank";
+    if(tags.amenity === "bank" || tags.amenity === "atm") return "bank";
 
     return null;
   }
@@ -397,7 +396,7 @@ out body 500;
     return ({
       fast_food:"Fast food",
       nightclub:"Nightclub",
-      store_fuel_convenience_supermarket:"Store/Fuel/Convenience",
+      storeFuelConvenienceSupermarket:"Store/Fuel/Convenience",
       clothes:"Clothes",
       hospital:"Hospital",
       parking:"Parking",
@@ -447,6 +446,7 @@ out body 500;
       const data = await res.json();
       const elements = Array.isArray(data.elements) ? data.elements : [];
 
+      // Keep only named + recognized categories
       let filtered = elements
         .filter(el => el && el.tags && (el.tags.name || el.tags.brand))
         .map(el => {
@@ -457,11 +457,13 @@ out body 500;
         .map(x => ({ ...x, dist: haversineMeters(userLngLat, [x.el.lon, x.el.lat]) }))
         .sort((a,b) => a.dist - b.dist);
 
-      const MAX_POI = 45;
+      // Hard cap to avoid lag
+      const MAX_POI = 55;
       filtered = filtered.slice(0, MAX_POI);
 
       const seen = new Set(filtered.map(x => `n${x.el.id}`));
 
+      // Remove markers no longer in list
       for(const [id, marker] of poiMarkers.entries()){
         if(!seen.has(id)){
           marker.remove();
@@ -469,6 +471,7 @@ out body 500;
         }
       }
 
+      // Add missing markers
       for(const item of filtered){
         const el = item.el;
         const id = `n${el.id}`;
@@ -477,11 +480,12 @@ out body 500;
         const name = el.tags.name || el.tags.brand || "(uten navn)";
         const k = item.k;
 
-        const markerEl = createImgMarker(ICONS[k], "poi");
+        const markerEl = wrapEl(createImgMarker(ICONS[k]), "poi");
         const m = new maplibregl.Marker({ element: markerEl })
           .setLngLat([el.lon, el.lat])
           .addTo(map);
 
+        // Popup on POI click; stop waypoint set
         m.getElement().addEventListener("click", (ev) => {
           ev.stopPropagation();
           new maplibregl.Popup({ closeButton:true, closeOnClick:true })
