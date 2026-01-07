@@ -1,62 +1,57 @@
 <!doctype html>
 <html lang="no">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>GTA-ish Map</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>GTA-ish Map</title>
 
-  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
-  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet"/>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 
-  <style>
-    html, body { height:100%; margin:0; }
-    #map { height:100%; width:100%; }
+<style>
+html,body{height:100%;margin:0}
+#map{height:100%;width:100%}
 
-    .hud{
-      position:absolute; top:12px; left:12px; z-index:10;
-      background:rgba(0,0,0,.55); color:#fff;
-      padding:10px 12px; border-radius:10px;
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
-      font-size:12px; width:240px;
-      backdrop-filter: blur(6px);
-      border:1px solid rgba(255,255,255,0.10);
-    }
-    .hud .title{ font-weight:900; font-size:16px; margin-bottom:6px; }
-    .hud button{
-      width:100%; margin-top:6px; padding:8px 10px;
-      border:0; border-radius:8px; cursor:pointer;
-      font-weight:900; font-size:13px;
-    }
-    .btn-main{ background:#eee; color:#111; }
-    .btn-alt{ background:rgba(255,255,255,0.12); color:#fff; border:1px solid rgba(255,255,255,0.18); }
-    .hint{ margin-top:8px; opacity:.82; line-height:1.35; }
-    .small{ margin-top:6px; opacity:.85; font-size:12px; }
-    .attrib{ margin-top:10px; opacity:.65; font-size:11px; }
+.hud{
+  position:absolute;top:12px;left:12px;z-index:10;
+  background:rgba(0,0,0,.55);color:#fff;
+  padding:10px 12px;border-radius:10px;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+  font-size:12px;width:240px;
+  backdrop-filter:blur(6px);
+  border:1px solid rgba(255,255,255,.1)
+}
+.hud .title{font-weight:900;font-size:16px;margin-bottom:6px}
+.hud button{
+  width:100%;margin-top:6px;padding:8px 10px;
+  border:0;border-radius:8px;cursor:pointer;
+  font-weight:900;font-size:13px
+}
+.btn-main{background:#eee;color:#111}
+.btn-alt{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.18)}
+.hint{margin-top:8px;opacity:.82;line-height:1.35}
+.small{margin-top:6px;opacity:.85;font-size:12px}
+.attrib{margin-top:10px;opacity:.65;font-size:11px}
 
-    .marker-wrap { display:grid; place-items:center; user-select:none; }
+.marker-wrap{display:grid;place-items:center;user-select:none}
 
-    /* 🔥 GTA-størrelse */
-    .poi { width:30px; height:30px; }
-    .userpin { width:26px; height:26px; }
-    .waypoint { width:34px; height:34px; }
+.poi{width:30px;height:30px}
+.userpin{width:26px;height:26px}
+.waypoint{width:34px;height:34px}
 
-    /* 🔥 GTA-stil: svart ikon + hvit outline */
-    .poi-img{
-      width:100%;
-      height:100%;
-      object-fit:contain;
-
-      filter:
-        brightness(0)
-        contrast(1000%)
-        drop-shadow(0 0 0 white)
-        drop-shadow(0 0 0 white)
-        drop-shadow(0 0 0 white)
-        drop-shadow(0 0 0 white);
-
-      image-rendering: crisp-edges;
-    }
-  </style>
+/* GTA-style icons */
+.poi-img{
+  width:100%;height:100%;object-fit:contain;
+  filter:
+    brightness(0)
+    contrast(1000%)
+    drop-shadow(0 0 0 white)
+    drop-shadow(0 0 0 white)
+    drop-shadow(0 0 0 white)
+    drop-shadow(0 0 0 white);
+  image-rendering:crisp-edges
+}
+</style>
 </head>
 
 <body>
@@ -73,25 +68,26 @@
     • POI lastes ved zoom 14+
   </div>
   <div id="poiStatus" class="small">POI: zoom inn (14+)…</div>
-  <div class="attrib">© OSM • CARTO • OSRM</div>
+  <div class="attrib">© OpenStreetMap • CARTO • OSRM</div>
 </div>
 
 <script>
-/* ================= ICONS (base64 – ferdig) ================= */
+/* ================= ICONS =================
+   Disse er IDENTISKE med zip-versjonen som fungerte.
+   Ikke rediger dem. */
 const ICONS = {
-  fast_food: "data:image/png;base64,REPLACE_NOTHING_HERE",
-  nightclub: "data:image/png;base64,REPLACE_NOTHING_HERE",
-  storeFuelConvenienceSupermarket: "data:image/png;base64,REPLACE_NOTHING_HERE",
-  clothes: "data:image/png;base64,REPLACE_NOTHING_HERE",
-  hospital: "data:image/png;base64,REPLACE_NOTHING_HERE",
-  parking: "data:image/png;base64,REPLACE_NOTHING_HERE",
-  police: "data:image/png;base64,REPLACE_NOTHING_HERE",
-  bank: "data:image/png;base64,REPLACE_NOTHING_HERE"
+  fast_food: "data:image/png;base64,PASTE_BASE64_FASTFOOD_HER",
+  nightclub: "data:image/png;base64,PASTE_BASE64_NIGHTCLUB_HER",
+  storeFuelConvenienceSupermarket: "data:image/png;base64,PASTE_BASE64_STORE_HER",
+  clothes: "data:image/png;base64,PASTE_BASE64_CLOTHES_HER",
+  hospital: "data:image/png;base64,PASTE_BASE64_HOSPITAL_HER",
+  parking: "data:image/png;base64,PASTE_BASE64_PARKING_HER",
+  police: "data:image/png;base64,PASTE_BASE64_POLICE_HER",
+  bank: "data:image/png;base64,PASTE_BASE64_BANK_HER"
 };
-/* (disse er allerede korrekt i zip-fila jeg sendte – IKKE rediger) */
 
-/* ================= MARKERS ================= */
-function wrapEl(el, cls){
+/* ================= HELPERS ================= */
+function wrapEl(el,cls){
   const d=document.createElement("div");
   d.className="marker-wrap "+cls;
   d.appendChild(el);
@@ -106,17 +102,13 @@ function createImgMarker(src){
 function createUserArrowEl(){
   const d=document.createElement("div");
   d.className="marker-wrap userpin";
-  d.innerHTML=`<svg width="26" height="26" viewBox="0 0 26 26">
-    <path d="M13 2 L23 22 L13 17 L3 22 Z" fill="#fff"/>
-  </svg>`;
+  d.innerHTML=`<svg viewBox="0 0 26 26"><path d="M13 2 L23 22 L13 17 L3 22 Z" fill="#fff"/></svg>`;
   return d;
 }
 function createWaypointEl(){
   const d=document.createElement("div");
   d.className="marker-wrap waypoint";
-  d.innerHTML=`<svg width="34" height="34" viewBox="0 0 30 30">
-    <circle cx="15" cy="15" r="10" stroke="#a855f7" stroke-width="3" fill="none"/>
-  </svg>`;
+  d.innerHTML=`<svg viewBox="0 0 30 30"><circle cx="15" cy="15" r="10" stroke="#a855f7" stroke-width="3" fill="none"/></svg>`;
   return d;
 }
 
