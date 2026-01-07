@@ -12,34 +12,39 @@
     html, body { height: 100%; margin: 0; }
     #map { height: 100%; width: 100%; }
 
-    /* Compact HUD */
     .hud{
       position:absolute; top:12px; left:12px; z-index:10;
       background:rgba(0,0,0,.55); color:#fff;
       padding:10px 12px; border-radius:10px;
       font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial;
-      font-size:12px; width:230px;
+      font-size:12px; width:240px;
       backdrop-filter: blur(6px);
       border: 1px solid rgba(255,255,255,0.10);
     }
-    .hud .title{ font-weight:800; font-size:16px; margin-bottom:6px; }
+    .hud .title{ font-weight:900; font-size:16px; margin-bottom:6px; }
     .hud button{
       width:100%; margin-top:6px; padding:8px 10px;
       border:0; border-radius:8px; cursor:pointer;
-      font-weight:800; font-size:13px;
+      font-weight:900; font-size:13px;
     }
     .btn-main{ background:#eee; color:#111; }
     .btn-alt{ background:rgba(255,255,255,0.12); color:#fff; border:1px solid rgba(255,255,255,0.18); }
-    .hint{ margin-top:8px; opacity:.8; line-height:1.35; }
-    .small{ margin-top:6px; opacity:.8; font-size:12px; }
+    .hint{ margin-top:8px; opacity:.82; line-height:1.35; }
+    .small{ margin-top:6px; opacity:.85; font-size:12px; }
     .attrib{ margin-top:10px; opacity:.65; font-size:11px; }
 
-    /* Markers */
     .marker-wrap { display:grid; place-items:center; user-select:none; }
     .shadow { filter: drop-shadow(0 2px 2px rgba(0,0,0,0.55)); }
     .poi { width:22px; height:22px; }
     .userpin { width:26px; height:26px; }
     .waypoint { width:34px; height:34px; }
+
+    .poi-img{
+      width:100%;
+      height:100%;
+      object-fit:contain;
+      image-rendering:auto;
+    }
   </style>
 </head>
 
@@ -66,92 +71,64 @@
 
 <script>
   // -----------------------
-  // Icons (GTA-ish: white w/ black outline)
+  // Your provided icons (embedded as data URIs)
   // -----------------------
-  function wrap(el, cls){
-    const d=document.createElement('div');
+  const ICONS = {
+    nightclub: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6PTBCYFVlZF9VXVtqeJmBanGQc1tdhbWGkJ6jq62rZ4C8ybqmx5moq6T/2wBDARweHiggKEopKCopq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6T/wAARCAArACsDASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAAQFBv/EACQQAAEDAwQBBQAAAAAAAAAAAAECAwQABREGEiExQRMUIkJR/8QAFQEBAQAAAAAAAAAAAAAAAAAAAgT/xAAZEQACAwEAAAAAAAAAAAAAAAAAAQIREyH/2gAMAwEAAhEDEQA/AK6tC3xpj4gTqVf1g6R7JmB8yVQe8jD1qR1kPq2f0x3oQZxv9C1cX3O3hW7gEJ0m7rZB4pXoS9bU7o2i9o9K4hDk3qG9bPqKf3yK1e7uUQ7JmY8ZlqvWQyQW2g4z7Vd4t6s+1bqCw2KXhYqFfVqQqEJ2YlZ2bU3Z5p4bY6ZbJk3+Y0c7Z0b0t8q9m0g6bS7k9vI1bq0pKfPqk9bU5kP7j1r0s6b4Y4W7bW6m3mG4x8pRjz6VY2X2pW2s8fZC1x0f3o+X0pYy2XW1fL2mQ0c1Yq7Nw0mQJ0o6Wkq2wQeZx9KpKkqvXv1C2uU3vKkq//2Q==",
+    storeFuelConvenienceSupermarket: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6PTBCYFVlZF9VXVtqeJmBanGQc1tdhbWGkJ6jq62rZ4C8ybqmx5moq6T/2wBDARweHiggKEopKCopq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6T/wAARCAAqACoDASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAQIDBf/EACUQAAIBAwMEAgMAAAAAAAAAAAECAwAEEQUSITFBBhMiUWFxkf/EABUBAQEAAAAAAAAAAAAAAAAAAAID/8QAGBEAAgMAAAAAAAAAAAAAAAAAAAERAhL/2gAMAwEAAhEDEQA/AK7b6m2k0m0i0c1xqQ3a3a0q2GQWk4o3Y9g7h7VwWZ8rK2xQe4p0n0lS0uQ0lYdWnKkD5gk5yB+1bYp5yKc0i7qYt5WQ2iYt1w0QmZxk9a7a1C2q0tWkqWZQjJwM+1dKqkZbq1sU2C0m3hE0ZzG3g9qvZp7G8b0mQbqkqgqkq/9j/4AAQSkZJRgABAQAAAQABAAD/2Q==",
+    clothes: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6PTBCYFVlZF9VXVtqeJmBanGQc1tdhbWGkJ6jq62rZ4C8ybqmx5moq6T/2wBDARweHiggKEopKCopq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6T/wAARCAAqACoDASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAQMEBf/EACMQAAIBAwQCAwAAAAAAAAAAAAECAwAEEQUSITFBBhMiUWFx/8QAFQEBAQAAAAAAAAAAAAAAAAAAAgP/xAAYEQADAQEAAAAAAAAAAAAAAAAAAQIREv/aAAwDAQACEQMRAD8AqG2bq2m0a0j0y1m1Zb2yZgk9oHn8qv1W9b2W0m0pN0o8qkqXJxkH8q8vW2t0s0c0tQ2m2Yb0gqgqkq//2Q==",
+    hospital: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAOEA4QMBIgACEQEDEQH/xAAbAAABBQEBAAAAAAAAAAAAAAAEAAIDBQYBB//EADwQAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APqkqKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
+    parking: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6PTBCYFVlZF9VXVtqeJmBanGQc1tdhbWGkJ6jq62rZ4C8ybqmx5moq6T/2wBDARweHiggKEopKCopq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6T/wAARCAAqACoDASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAQMEBf/EACQQAAIBAwMDBQAAAAAAAAAAAAECAwAEEQUSITFBBhMiUWFx/8QAFQEBAQAAAAAAAAAAAAAAAAAAAgP/xAAZEQADAQEAAAAAAAAAAAAAAAAAAQIREv/aAAwDAQACEQMRAD8Ap2k2bq2m0a0j0y1m1Zb2yZgk9oHn8qv1W9b2W0m0pN0o8qkqXJxkH8q8vW2t0s0c0tQ2m2Yb0gqgqkq//2Q==",
+    police: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAOEA4QMBIgACEQEDEQH/xAAbAAACAwEBAQAAAAAAAAAAAAAEBQADBgIBB//EAD0QAAIBAgQDBgQEBQQDAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APqkqKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
+    fast_food: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAOEA4QMBIgACEQEDEQH/xAAbAAABBQEBAAAAAAAAAAAAAAAEAAIDBQYBB//EADoQAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APqkqKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z"
+  };
+
+  // -----------------------
+  // Marker helpers
+  // -----------------------
+  function wrapEl(el, cls){
+    const d = document.createElement("div");
     d.className = `marker-wrap shadow ${cls}`;
     d.appendChild(el);
     return d;
   }
 
-  function svgPathIcon(pathD, size=30, fill="#fff", stroke="#000", strokeW=2){
-    const ns="http://www.w3.org/2000/svg";
-    const svg=document.createElementNS(ns,"svg");
-    svg.setAttribute("viewBox","0 0 30 30");
-    svg.setAttribute("width", String(size));
-    svg.setAttribute("height", String(size));
-    const p=document.createElementNS(ns,"path");
-    p.setAttribute("d", pathD);
-    p.setAttribute("fill", fill);
-    p.setAttribute("stroke", stroke);
-    p.setAttribute("stroke-width", String(strokeW));
-    p.setAttribute("stroke-linejoin","round");
-    p.setAttribute("stroke-linecap","round");
-    svg.appendChild(p);
-    return svg;
+  function createImgMarker(dataUri, cls){
+    const img = document.createElement("img");
+    img.className = "poi-img";
+    img.src = dataUri;
+    img.alt = "";
+    return wrapEl(img, cls);
   }
 
+  // Keep your user + waypoint as before:
   function createUserArrowEl(){
-    // white triangle arrow
-    const p = "M13 2 L23 22 L13 17 L3 22 Z";
-    return wrap(svgPathIcon(p, 26, "#fff", "#000", 2), "userpin");
+    const el = document.createElement('div');
+    el.className = 'marker-wrap shadow userpin';
+    el.innerHTML = `
+      <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden="true">
+        <path d="M13 2 L23 22 L13 17.4 L3 22 Z" fill="#ffffff"/>
+        <path d="M13 2 L23 22 L13 17.4 L3 22 Z" fill="none" stroke="rgba(0,0,0,0.55)" stroke-width="1.2"/>
+      </svg>
+    `;
+    return el;
   }
 
   function createWaypointEl(){
-    // purple "flower/clover" (like earlier)
-    const ns="http://www.w3.org/2000/svg";
-    const svg=document.createElementNS(ns,"svg");
-    svg.setAttribute("viewBox","0 0 30 30");
-    svg.setAttribute("width","34");
-    svg.setAttribute("height","34");
-
-    const g=document.createElementNS(ns,"g");
-    g.setAttribute("fill","none");
-    g.setAttribute("stroke","#a855f7");
-    g.setAttribute("stroke-width","2.8");
-    g.setAttribute("stroke-linecap","round");
-    g.setAttribute("stroke-linejoin","round");
-
-    const paths=[
-      "M15 7 C12.2 7,10 9.2,10 12 C10 14.8,12.2 17,15 17 C17.8 17,20 14.8,20 12 C20 9.2,17.8 7,15 7Z",
-      "M15 13 C12.2 13,10 15.2,10 18 C10 20.8,12.2 23,15 23 C17.8 23,20 20.8,20 18 C20 15.2,17.8 13,15 13Z",
-      "M7 15 C7 12.2,9.2 10,12 10 C14.8 10,17 12.2,17 15 C17 17.8,14.8 20,12 20 C9.2 20,7 17.8,7 15Z",
-      "M13 15 C13 12.2,15.2 10,18 10 C20.8 10,23 12.2,23 15 C23 17.8,20.8 20,18 20 C15.2 20,13 17.8,13 15Z"
-    ];
-    for(const d of paths){
-      const p=document.createElementNS(ns,"path");
-      p.setAttribute("d", d);
-      g.appendChild(p);
-    }
-    const c=document.createElementNS(ns,"circle");
-    c.setAttribute("cx","15"); c.setAttribute("cy","15"); c.setAttribute("r","2.2");
-    g.appendChild(c);
-
-    svg.appendChild(g);
-    return wrap(svg, "waypoint");
-  }
-
-  // POI symbols (white with black outline)
-  const POI_PATH = {
-    fast_food:  "M6 6h18v18H6z",                 // simple box (burger placeholder)
-    nightclub:  "M10 6h10v18H10z",                // tall box
-    supermarket:"M7 10h16v12H7z",                 // store
-    convenience:"M7 10h16v12H7z",                 // same as store
-    clothes:    "M8 6l7-3 7 3 2 4-3 2v12H11V12l-3-2z", // shirt
-    hospital:   "M13 6h4v6h6v4h-6v6h-4v-6H7v-4h6z",     // cross
-    fuel:       "M9 6h12v18H9z",                  // pump-ish
-    parking:    "M10 6h7a6 6 0 010 12h-7z",        // P-ish block
-    bank:       "M5 10h20v14H5z M5 10l10-5 10 5",  // bank
-    atm:        "M5 10h20v14H5z M5 10l10-5 10 5",  // same bucket
-    police:     "M15 4l10 4v7c0 6-5 10-10 11-5-1-10-5-10-11V8z", // shield
-    hotel:      "M6 8h8v14H6z M16 12h8v10h-8z"     // buildings
-  };
-
-  function createPOIEl(kind){
-    const pathD = POI_PATH[kind] || "M15 6a9 9 0 1 0 0.01 0Z";
-    const svg = svgPathIcon(pathD, 22, "#fff", "#000", 2);
-    return wrap(svg, "poi");
+    const el = document.createElement('div');
+    el.className = 'marker-wrap shadow waypoint';
+    el.innerHTML = `
+      <svg width="34" height="34" viewBox="0 0 30 30" aria-hidden="true">
+        <g fill="none" stroke="#a855f7" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 7 C12.2 7,10 9.2,10 12 C10 14.8,12.2 17,15 17 C17.8 17,20 14.8,20 12 C20 9.2,17.8 7,15 7Z"/>
+          <path d="M15 13 C12.2 13,10 15.2,10 18 C10 20.8,12.2 23,15 23 C17.8 23,20 20.8,20 18 C20 15.2,17.8 13,15 13Z"/>
+          <path d="M7 15 C7 12.2,9.2 10,12 10 C14.8 10,17 12.2,17 15 C17 17.8,14.8 20,12 20 C9.2 20,7 17.8,7 15Z"/>
+          <path d="M13 15 C13 12.2,15.2 10,18 10 C20.8 10,23 12.2,23 15 C23 17.8,20.8 20,18 20 C15.2 20,13 17.8,13 15Z"/>
+          <circle cx="15" cy="15" r="2.2" />
+        </g>
+      </svg>
+    `;
+    return el;
   }
 
   // -----------------------
@@ -180,7 +157,6 @@
     zoom: 13
   });
 
-  // Route layer
   map.on("load", () => {
     map.addSource("route", { type:"geojson", data:{ type:"FeatureCollection", features:[] } });
 
@@ -233,7 +209,6 @@
     if(src) src.setData({ type:"FeatureCollection", features:[] });
     setStatus("Waypoint fjernet.");
   }
-
   clearBtn.addEventListener("click", clearRouteAndWaypoint);
 
   // -----------------------
@@ -281,7 +256,6 @@
           userEl.style.transform = `rotate(${heading}deg)`;
         }
 
-        // If waypoint exists, refresh route occasionally as you move
         if(destLngLat) drawRouteTo(destLngLat, true);
         schedulePOILoad();
       },
@@ -316,7 +290,6 @@
     if(!userLngLat){ setStatus("Start GPS først."); return; }
 
     const now = Date.now();
-    // less strict when auto-updating
     const minGap = isAuto ? 2500 : 900;
     if(now - lastRouteAt < minGap) return;
     lastRouteAt = now;
@@ -333,7 +306,7 @@
       const res = await fetch(url);
       const data = await res.json();
       if(!data.routes || !data.routes[0]){
-        setStatus("Fant ingen rute.");
+        if(!isAuto) setStatus("Fant ingen rute.");
         return;
       }
 
@@ -353,7 +326,7 @@
   }
 
   // -----------------------
-  // POI loading (your exact categories)
+  // POI loading (only your categories)
   // -----------------------
   function schedulePOILoad(){
     if(poiFetchTimer) clearTimeout(poiFetchTimer);
@@ -371,16 +344,15 @@
 (
   node["amenity"="fast_food"](${s},${w},${n},${e});
   node["amenity"="nightclub"](${s},${w},${n},${e});
+
   node["shop"="supermarket"](${s},${w},${n},${e});
   node["shop"="convenience"](${s},${w},${n},${e});
+  node["amenity"="fuel"](${s},${w},${n},${e});
+
   node["shop"="clothes"](${s},${w},${n},${e});
   node["amenity"="hospital"](${s},${w},${n},${e});
-  node["amenity"="fuel"](${s},${w},${n},${e});
   node["amenity"="parking"](${s},${w},${n},${e});
-  node["amenity"="bank"](${s},${w},${n},${e});
-  node["amenity"="atm"](${s},${w},${n},${e});
   node["amenity"="police"](${s},${w},${n},${e});
-  node["tourism"="hotel"](${s},${w},${n},${e});
 );
 out body 400;
 `;
@@ -397,37 +369,32 @@ out body 400;
     return 2*R*Math.asin(Math.min(1, Math.sqrt(h)));
   }
 
-  function poiKindFromTags(tags){
+  function poiKind(tags){
     if(tags.amenity === "fast_food") return "fast_food";
     if(tags.amenity === "nightclub") return "nightclub";
-    if(tags.shop === "supermarket") return "supermarket";
-    if(tags.shop === "convenience") return "convenience";
+
+    if(tags.shop === "supermarket") return "storeFuelConvenienceSupermarket";
+    if(tags.shop === "convenience") return "storeFuelConvenienceSupermarket";
+    if(tags.amenity === "fuel") return "storeFuelConvenienceSupermarket";
+
     if(tags.shop === "clothes") return "clothes";
     if(tags.amenity === "hospital") return "hospital";
-    if(tags.amenity === "fuel") return "fuel";
     if(tags.amenity === "parking") return "parking";
-    if(tags.amenity === "bank") return "bank";
-    if(tags.amenity === "atm") return "atm";
     if(tags.amenity === "police") return "police";
-    if(tags.tourism === "hotel") return "hotel";
+
     return null;
   }
 
-  function labelFromKind(kind){
+  function labelFromKind(k){
     return ({
       fast_food:"Fast food",
       nightclub:"Nightclub",
-      supermarket:"Supermarket",
-      convenience:"Convenience",
+      storeFuelConvenienceSupermarket:"Store/Fuel/Convenience",
       clothes:"Clothes",
       hospital:"Hospital",
-      fuel:"Fuel",
       parking:"Parking",
-      bank:"Bank/ATM",
-      atm:"Bank/ATM",
-      police:"Police",
-      hotel:"Hotel"
-    })[kind] || "POI";
+      police:"Police"
+    })[k] || "POI";
   }
 
   function escapeHtml(str){
@@ -475,13 +442,10 @@ out body 400;
       let filtered = elements
         .filter(el => el && el.tags && (el.tags.name || el.tags.brand))
         .map(el => {
-          const kind = poiKindFromTags(el.tags);
-          return kind ? { el, kind } : null;
+          const k = poiKind(el.tags);
+          return k ? { el, k } : null;
         })
-        .filter(Boolean);
-
-      // Sort by distance to user (no ratings available in OSM)
-      filtered = filtered
+        .filter(Boolean)
         .map(x => ({ ...x, dist: haversineMeters(userLngLat, [x.el.lon, x.el.lat]) }))
         .sort((a,b) => a.dist - b.dist);
 
@@ -506,10 +470,10 @@ out body 400;
         if(poiMarkers.has(id)) continue;
 
         const name = el.tags.name || el.tags.brand;
-        const kind = item.kind;
-        const label = labelFromKind(kind);
+        const k = item.k;
 
-        const m = new maplibregl.Marker({ element: createPOIEl(kind) })
+        const markerEl = createImgMarker(ICONS[k], "poi");
+        const m = new maplibregl.Marker({ element: markerEl })
           .setLngLat([el.lon, el.lat])
           .addTo(map);
 
@@ -520,8 +484,8 @@ out body 400;
             .setLngLat([el.lon, el.lat])
             .setHTML(`
               <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;font-size:13px">
-                <div style="font-weight:800;margin-bottom:4px">${escapeHtml(name)}</div>
-                <div style="opacity:.75">${escapeHtml(label)}</div>
+                <div style="font-weight:900;margin-bottom:4px">${escapeHtml(name)}</div>
+                <div style="opacity:.75">${escapeHtml(labelFromKind(k))}</div>
               </div>
             `)
             .addTo(map);
