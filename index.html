@@ -35,7 +35,8 @@
 
     .marker-wrap { display:grid; place-items:center; user-select:none; }
     .shadow { filter: drop-shadow(0 2px 2px rgba(0,0,0,0.55)); }
-    .poi { width:22px; height:22px; }
+
+    .poi { width:26px; height:26px; }
     .userpin { width:26px; height:26px; }
     .waypoint { width:34px; height:34px; }
 
@@ -71,16 +72,24 @@
 
 <script>
   // -----------------------
-  // Your provided icons (embedded as data URIs)
+  // EXACT icons you sent (real base64)
   // -----------------------
   const ICONS = {
-    nightclub: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6PTBCYFVlZF9VXVtqeJmBanGQc1tdhbWGkJ6jq62rZ4C8ybqmx5moq6T/2wBDARweHiggKEopKCopq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6T/wAARCAArACsDASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAAQFBv/EACQQAAEDAwQBBQAAAAAAAAAAAAECAwQABREGEiExQRMUIkJR/8QAFQEBAQAAAAAAAAAAAAAAAAAAAgT/xAAZEQACAwEAAAAAAAAAAAAAAAAAAQIREyH/2gAMAwEAAhEDEQA/AK6tC3xpj4gTqVf1g6R7JmB8yVQe8jD1qR1kPq2f0x3oQZxv9C1cX3O3hW7gEJ0m7rZB4pXoS9bU7o2i9o9K4hDk3qG9bPqKf3yK1e7uUQ7JmY8ZlqvWQyQW2g4z7Vd4t6s+1bqCw2KXhYqFfVqQqEJ2YlZ2bU3Z5p4bY6ZbJk3+Y0c7Z0b0t8q9m0g6bS7k9vI1bq0pKfPqk9bU5kP7j1r0s6b4Y4W7bW6m3mG4x8pRjz6VY2X2pW2s8fZC1x0f3o+X0pYy2XW1fL2mQ0c1Yq7Nw0mQJ0o6Wkq2wQeZx9KpKkqvXv1C2uU3vKkq//2Q==",
-    storeFuelConvenienceSupermarket: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6PTBCYFVlZF9VXVtqeJmBanGQc1tdhbWGkJ6jq62rZ4C8ybqmx5moq6T/2wBDARweHiggKEopKCopq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6T/wAARCAAqACoDASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAQIDBf/EACUQAAIBAwMEAgMAAAAAAAAAAAECAwAEEQUSITFBBhMiUWFxkf/EABUBAQEAAAAAAAAAAAAAAAAAAAID/8QAGBEAAgMAAAAAAAAAAAAAAAAAAAERAhL/2gAMAwEAAhEDEQA/AK7b6m2k0m0i0c1xqQ3a3a0q2GQWk4o3Y9g7h7VwWZ8rK2xQe4p0n0lS0uQ0lYdWnKkD5gk5yB+1bYp5yKc0i7qYt5WQ2iYt1w0QmZxk9a7a1C2q0tWkqWZQjJwM+1dKqkZbq1sU2C0m3hE0ZzG3g9qvZp7G8b0mQbqkqgqkq/9j/4AAQSkZJRgABAQAAAQABAAD/2Q==",
-    clothes: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6PTBCYFVlZF9VXVtqeJmBanGQc1tdhbWGkJ6jq62rZ4C8ybqmx5moq6T/2wBDARweHiggKEopKCopq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6T/wAARCAAqACoDASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAQMEBf/EACMQAAIBAwQCAwAAAAAAAAAAAAECAwAEEQUSITFBBhMiUWFx/8QAFQEBAQAAAAAAAAAAAAAAAAAAAgP/xAAYEQADAQEAAAAAAAAAAAAAAAAAAQIREv/aAAwDAQACEQMRAD8AqG2bq2m0a0j0y1m1Zb2yZgk9oHn8qv1W9b2W0m0pN0o8qkqXJxkH8q8vW2t0s0c0tQ2m2Yb0gqgqkq//2Q==",
+    nightclub: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAEAAQAMBIgACEQEDEQH/xAAbAAEAAgMBAQAAAAAAAAAAAAAABQYBBAcDAv/EAD4QAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APVKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
+
+    store_fuel_convenience_supermarket: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAEAAQAMBIgACEQEDEQH/xAAbAAEAAgMBAQAAAAAAAAAAAAAABQYBBAcDAv/EADoQAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APVKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
+
+    clothes: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAEAAQAMBIgACEQEDEQH/xAAbAAEAAgMBAQAAAAAAAAAAAAAABQYBBAcDAv/EADoQAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APVKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
+
     hospital: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAOEA4QMBIgACEQEDEQH/xAAbAAABBQEBAAAAAAAAAAAAAAAEAAIDBQYBB//EADwQAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APqkqKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
-    parking: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDABsSFBcUERsXFhceHBsgKEIrKCUlKFE6PTBCYFVlZF9VXVtqeJmBanGQc1tdhbWGkJ6jq62rZ4C8ybqmx5moq6T/2wBDARweHiggKEopKCopq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6T/wAARCAAqACoDASIAAhEBAxEB/8QAFwAAAwEAAAAAAAAAAAAAAAAAAQMEBf/EACQQAAIBAwMDBQAAAAAAAAAAAAECAwAEEQUSITFBBhMiUWFx/8QAFQEBAQAAAAAAAAAAAAAAAAAAAgP/xAAZEQADAQEAAAAAAAAAAAAAAAAAAQIREv/aAAwDAQACEQMRAD8Ap2k2bq2m0a0j0y1m1Zb2yZgk9oHn8qv1W9b2W0m0pN0o8qkqXJxkH8q8vW2t0s0c0tQ2m2Yb0gqgqkq//2Q==",
+
+    parking: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAEAAQAMBIgACEQEDEQH/xAAbAAEAAgMBAQAAAAAAAAAAAAAABQYBBAcDAv/EADoQAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APVKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
+
     police: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAOEA4QMBIgACEQEDEQH/xAAbAAACAwEBAQAAAAAAAAAAAAAEBQADBgIBB//EAD0QAAIBAgQDBgQEBQQDAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APqkqKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
-    fast_food: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAOEA4QMBIgACEQEDEQH/xAAbAAABBQEBAAAAAAAAAAAAAAAEAAIDBQYBB//EADoQAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APqkqKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z"
+
+    fast_food: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAOEA4QMBIgACEQEDEQH/xAAbAAABBQEBAAAAAAAAAAAAAAAEAAIDBQYBB//EADoQAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APqkqKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z",
+
+    bank: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBxAQEA8QEA8QDw8PDw8PDw8PDw8PDw8PFREWFhURFRUYHSggGBolGxUVITEhJSkrLi4uFx8zODMsNygtLisBCgoKDg0OGhAQGi0lHyUtLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLf/AABEIAEAAQAMBIgACEQEDEQH/xAAbAAEAAgMBAQAAAAAAAAAAAAAABQYBBAcDAv/EADoQAAIBAgQDBgQEBQUAAAAAAAECAwQRAAUSITFBBhMiUWFxgZGhMkJSsdHh8BMzQqLwI2LxFRYkU4PS/8QAGQEBAAMBAQAAAAAAAAAAAAAAAAECAwQF/8QAJxEBAAICAgICAgMAAAAAAAAAAAECAxEhBBIxQQUTImFxgZGhscH/2gAMAwEAAhEDEQA/APVKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigD//Z"
   };
 
   // -----------------------
@@ -101,7 +110,7 @@
     return wrapEl(img, cls);
   }
 
-  // Keep your user + waypoint as before:
+  // Keep your user + waypoint:
   function createUserArrowEl(){
     const el = document.createElement('div');
     el.className = 'marker-wrap shadow userpin';
@@ -194,7 +203,6 @@
   let destLngLat = null;
   let lastRouteAt = 0;
 
-  // POI markers with cleanup
   const poiMarkers = new Map(); // id -> marker
   let poiFetchTimer = null;
   let poiAbort = null;
@@ -211,9 +219,7 @@
   }
   clearBtn.addEventListener("click", clearRouteAndWaypoint);
 
-  // -----------------------
   // GPS toggle
-  // -----------------------
   gpsBtn.addEventListener("click", () => {
     if(!navigator.geolocation){
       setStatus("GPS støttes ikke.");
@@ -268,9 +274,7 @@
     );
   });
 
-  // -----------------------
   // Waypoint on click
-  // -----------------------
   map.on("click", (e) => {
     const ll = [e.lngLat.lng, e.lngLat.lat];
     destLngLat = ll;
@@ -325,9 +329,7 @@
     }
   }
 
-  // -----------------------
-  // POI loading (only your categories)
-  // -----------------------
+  // POI loading
   function schedulePOILoad(){
     if(poiFetchTimer) clearTimeout(poiFetchTimer);
     poiFetchTimer = setTimeout(loadPOIsInView, 900);
@@ -353,8 +355,11 @@
   node["amenity"="hospital"](${s},${w},${n},${e});
   node["amenity"="parking"](${s},${w},${n},${e});
   node["amenity"="police"](${s},${w},${n},${e});
+
+  node["amenity"="bank"](${s},${w},${n},${e});
+  node["amenity"="atm"](${s},${w},${n},${e});
 );
-out body 400;
+out body 500;
 `;
   }
 
@@ -373,14 +378,17 @@ out body 400;
     if(tags.amenity === "fast_food") return "fast_food";
     if(tags.amenity === "nightclub") return "nightclub";
 
-    if(tags.shop === "supermarket") return "storeFuelConvenienceSupermarket";
-    if(tags.shop === "convenience") return "storeFuelConvenienceSupermarket";
-    if(tags.amenity === "fuel") return "storeFuelConvenienceSupermarket";
+    if(tags.shop === "supermarket") return "store_fuel_convenience_supermarket";
+    if(tags.shop === "convenience") return "store_fuel_convenience_supermarket";
+    if(tags.amenity === "fuel") return "store_fuel_convenience_supermarket";
 
     if(tags.shop === "clothes") return "clothes";
     if(tags.amenity === "hospital") return "hospital";
     if(tags.amenity === "parking") return "parking";
     if(tags.amenity === "police") return "police";
+
+    if(tags.amenity === "bank") return "bank";
+    if(tags.amenity === "atm") return "bank";
 
     return null;
   }
@@ -389,11 +397,12 @@ out body 400;
     return ({
       fast_food:"Fast food",
       nightclub:"Nightclub",
-      storeFuelConvenienceSupermarket:"Store/Fuel/Convenience",
+      store_fuel_convenience_supermarket:"Store/Fuel/Convenience",
       clothes:"Clothes",
       hospital:"Hospital",
       parking:"Parking",
-      police:"Police"
+      police:"Police",
+      bank:"Bank/ATM"
     })[k] || "POI";
   }
 
@@ -438,7 +447,6 @@ out body 400;
       const data = await res.json();
       const elements = Array.isArray(data.elements) ? data.elements : [];
 
-      // Keep only named + recognized categories
       let filtered = elements
         .filter(el => el && el.tags && (el.tags.name || el.tags.brand))
         .map(el => {
@@ -449,13 +457,11 @@ out body 400;
         .map(x => ({ ...x, dist: haversineMeters(userLngLat, [x.el.lon, x.el.lat]) }))
         .sort((a,b) => a.dist - b.dist);
 
-      // Hard cap to avoid lag
-      const MAX_POI = 40;
+      const MAX_POI = 45;
       filtered = filtered.slice(0, MAX_POI);
 
       const seen = new Set(filtered.map(x => `n${x.el.id}`));
 
-      // Remove markers no longer in list
       for(const [id, marker] of poiMarkers.entries()){
         if(!seen.has(id)){
           marker.remove();
@@ -463,13 +469,12 @@ out body 400;
         }
       }
 
-      // Add missing markers
       for(const item of filtered){
         const el = item.el;
         const id = `n${el.id}`;
         if(poiMarkers.has(id)) continue;
 
-        const name = el.tags.name || el.tags.brand;
+        const name = el.tags.name || el.tags.brand || "(uten navn)";
         const k = item.k;
 
         const markerEl = createImgMarker(ICONS[k], "poi");
@@ -477,7 +482,6 @@ out body 400;
           .setLngLat([el.lon, el.lat])
           .addTo(map);
 
-        // Popup on POI click; stop waypoint set
         m.getElement().addEventListener("click", (ev) => {
           ev.stopPropagation();
           new maplibregl.Popup({ closeButton:true, closeOnClick:true })
