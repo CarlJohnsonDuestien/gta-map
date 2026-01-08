@@ -1083,7 +1083,7 @@
         const heading = (typeof pos.coords.heading === 'number' && !Number.isNaN(pos.coords.heading))
           ? pos.coords.heading : null;
 
-        setStatus(`${i18n.t("youAreHere")}: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        setStatus(`${t("youAreHere")}: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
 
         if(!userMarker){
           userEl = createUserArrowEl();
