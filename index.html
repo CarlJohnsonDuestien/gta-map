@@ -450,6 +450,8 @@
 (
   node["amenity"="fast_food"](${s},${w},${n},${e});
   node["amenity"="nightclub"](${s},${w},${n},${e});
+  node["amenity"="bar"](${s},${w},${n},${e});
+  node["amenity"="pub"](${s},${w},${n},${e});
 
   node["shop"="supermarket"](${s},${w},${n},${e});
   node["shop"="convenience"](${s},${w},${n},${e});
@@ -524,6 +526,8 @@ out body 600;
   function poiKind(tags){
     if(tags.amenity === "fast_food") return "fast_food";
     if(tags.amenity === "nightclub") return "nightclub";
+    if(tags.amenity === "bar") return "nightclub";
+    if(tags.amenity === "pub") return "nightclub";
 
     if(tags.shop === "supermarket") return "storeFuelConvenienceSupermarket";
     if(tags.shop === "convenience") return "storeFuelConvenienceSupermarket";
@@ -590,7 +594,7 @@ out body 600;
       const elements = Array.isArray(data.elements) ? data.elements : [];
 
       let filtered = elements
-        .filter(el => el && el.tags && (el.tags.name || el.tags.brand))
+        .filter(el => el && el.tags && (el.tags.name || el.tags.brand || el.tags.amenity === "bar" || el.tags.amenity === "pub"))
         .map(el => {
           const k = poiKind(el.tags);
           return k ? { el, k } : null;
