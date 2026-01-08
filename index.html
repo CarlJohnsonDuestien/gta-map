@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="no">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -345,18 +345,18 @@
   <div class="hud" id="hud">
     <div class="hud-top">
       <div class="title">Vice Details</div>
-      <button id="hudToggle" class="hud-toggle" type="button" aria-label="Skjul/vis meny">✕</button>
+      <button id="hudToggle" class="hud-toggle" type="button" aria-label="Hide/show menu">✕</button>
     </div>
 
     <div class="hud-body" id="hudBody">
-      <div id="status">Trykk Start GPS</div>
+      <div id="status">Tap Start GPS</div>
 
     <div id="firstRun" class="first-run" style="display:none">
       <div class="fr-title">Tips</div>
       <div class="fr-text">
-        • Trykk på kartet for waypoint<br>
-        • Sett Home for raskt “spawn”-punkt<br>
-        • Slå av “Follow me” hvis du vil utforske fritt
+        • Tap the map to set a waypoint<br>
+        • Set Home for a quick spawn point<br>
+        • Turn off “Follow me” to explore freely
       </div>
       <button id="firstRunOk" class="btn-main fr-ok" type="button">OK</button>
     </div>
@@ -372,18 +372,169 @@
     <button id="resetBtn" class="btn-alt">Reset / Clear all</button>
 
       <div class="hint">
-        • Trykk på kartet for waypoint<br>
-        • Lilla linje følger veiene (ingen navigasjon)<br>
-        • POI lastes automatisk (flere når du zoomer inn)
-      • Set Home: bruk GPS eller velg i kartet
+        • Tap the map to set a waypoint<br>
+        • Purple line follows roads (no navigation)<br>
+        • POIs load automatically (more as you zoom in)
+      • Set Home: use GPS or pick on the map
       </div>
 
-      <div id="poiStatus" class="small">POI: laster ved bevegelse…</div>
+      <div id="poiStatus" class="small">POI: loading on movement…</div>
       <div class="attrib">© OpenStreetMap contributors • Basemap © CARTO • Routing: OSRM</div>
     </div>
   </div>
 
 <script>
+
+  // -----------------------
+  // i18n (English default + auto language)
+  // -----------------------
+  const I18N = {
+    en: {
+      title: "Vice Details",
+      aria_toggle: "Hide/show menu",
+      status_tap_start: "Tap Start GPS",
+      tips_title: "Tips",
+      tips_html: "• Tap the map to set a waypoint<br>• Set Home for a quick spawn point<br>• Turn off “Follow me” to explore freely",
+      btn_ok: "OK",
+      btn_start_gps: "Start GPS",
+      btn_stop_gps: "Stop GPS",
+      btn_clear_waypoint: "Clear waypoint",
+      btn_set_home_gps: "Set Home (GPS)",
+      btn_pick_home: "Pick Home on map",
+      btn_clear_home: "Clear Home",
+      btn_follow_on: "Follow me: ON",
+      btn_follow_off: "Follow me: OFF",
+      btn_reset: "Reset / Clear all",
+      hint_html: "• Tap the map for waypoint<br>• Purple line follows roads (no navigation)<br>• POIs load automatically (more as you zoom in)<br>• Set Home: use GPS or pick on the map",
+      poi_loading_move: "POI: loading on movement…",
+      poi_loading: "POI: loading…",
+      poi_error: "POI: error.",
+      poi_rate: "POI: error / rate limit.",
+      poi_zoom: "POI: zoom in…",
+      poi_showing: "POI: showing {n} (closest to you).",
+      gps_not_supported: "GPS not supported.",
+      requesting_location: "Requesting location…",
+      gps_stopped: "GPS stopped.",
+      start_gps_first: "Start GPS first.",
+      start_gps_first_home: "Start GPS first to set Home.",
+      tap_map_set_home: "Tap the map to set Home.",
+      waypoint_cleared: "Waypoint cleared.",
+      home_cleared: "Home cleared.",
+      home_set: "Home set.",
+      reset_done: "Reset complete.",
+      you_are_here: "You are here: {lat}, {lng}",
+      waypoint_set: "Waypoint set. ~{mins} min • {km} km",
+      route_none: "No route found.",
+      route_error: "Route error."
+    },
+    no: {
+      title: "Vice Details",
+      aria_toggle: "Skjul/vis meny",
+      status_tap_start: "Trykk Start GPS",
+      tips_title: "Tips",
+      tips_html: "• Trykk på kartet for waypoint<br>• Sett Home for raskt “spawn”-punkt<br>• Slå av “Follow me” hvis du vil utforske fritt",
+      btn_ok: "OK",
+      btn_start_gps: "Start GPS",
+      btn_stop_gps: "Stop GPS",
+      btn_clear_waypoint: "Fjern waypoint",
+      btn_set_home_gps: "Sett Home (GPS)",
+      btn_pick_home: "Velg Home i kart",
+      btn_clear_home: "Fjern Home",
+      btn_follow_on: "Follow me: PÅ",
+      btn_follow_off: "Follow me: AV",
+      btn_reset: "Nullstill / fjern alt",
+      hint_html: "• Trykk på kartet for waypoint<br>• Lilla linje følger veiene (ingen navigasjon)<br>• POI lastes automatisk (flere når du zoomer inn)<br>• Sett Home: bruk GPS eller velg i kartet",
+      poi_loading_move: "POI: laster ved bevegelse…",
+      poi_loading: "POI: laster…",
+      poi_error: "POI: feil.",
+      poi_rate: "POI: feil / rate limit.",
+      poi_zoom: "POI: zoom inn…",
+      poi_showing: "POI: viser {n} (nærmest deg).",
+      gps_not_supported: "GPS støttes ikke.",
+      requesting_location: "Ber om posisjon…",
+      gps_stopped: "GPS stoppet.",
+      start_gps_first: "Start GPS først.",
+      start_gps_first_home: "Start GPS først for å sette Home.",
+      tap_map_set_home: "Trykk på kartet for å sette Home.",
+      waypoint_cleared: "Waypoint fjernet.",
+      home_cleared: "Home fjernet.",
+      home_set: "Home satt.",
+      reset_done: "Nullstilt.",
+      you_are_here: "Du er her: {lat}, {lng}",
+      waypoint_set: "Waypoint satt. ~{mins} min • {km} km",
+      route_none: "Fant ingen rute.",
+      route_error: "Rute-feil."
+    }
+  };
+
+  function detectLang(){
+    const l = (navigator.language || "en").toLowerCase();
+    if(l.startsWith("no") || l.startsWith("nb") || l.startsWith("nn")) return "no";
+    return "en";
+  }
+  let LANG = detectLang();
+  function t(key, vars){
+    const dict = I18N[LANG] || I18N.en;
+    let s = (dict && dict[key]) || I18N.en[key] || key;
+    if(vars){
+      for(const k in vars){
+        s = s.replaceAll("{" + k + "}", vars[k]);
+      }
+    }
+    return s;
+  }
+
+  // Apply static UI translations
+  (function applyUI(){
+    document.documentElement.lang = LANG;
+    const titleEl = document.querySelector(".hud .title");
+    if(titleEl) titleEl.textContent = t("title");
+
+    const toggle = document.getElementById("hudToggle");
+    if(toggle) toggle.setAttribute("aria-label", t("aria_toggle"));
+
+    const statusEl = document.getElementById("status");
+    if(statusEl && statusEl.textContent.trim() === "Tap Start GPS") statusEl.textContent = t("status_tap_start");
+
+    const frTitle = document.querySelector("#firstRun .fr-title");
+    if(frTitle) frTitle.textContent = t("tips_title");
+    const frText = document.querySelector("#firstRun .fr-text");
+    if(frText) frText.innerHTML = t("tips_html");
+    const frOk = document.getElementById("firstRunOk");
+    if(frOk) frOk.textContent = t("btn_ok");
+
+    const gpsBtn = document.getElementById("gpsBtn");
+    if(gpsBtn && gpsBtn.textContent.trim() === "Start GPS") gpsBtn.textContent = t("btn_start_gps");
+
+    const clearBtn = document.getElementById("clearBtn");
+    if(clearBtn) clearBtn.textContent = t("btn_clear_waypoint");
+
+    const homeBtn = document.getElementById("homeBtn");
+    if(homeBtn) homeBtn.textContent = t("btn_set_home_gps");
+
+    const homePickBtn = document.getElementById("homePickBtn");
+    if(homePickBtn) homePickBtn.textContent = t("btn_pick_home");
+
+    const homeClearBtn = document.getElementById("homeClearBtn");
+    if(homeClearBtn) homeClearBtn.textContent = t("btn_clear_home");
+
+    const followBtn = document.getElementById("followBtn");
+    if(followBtn){
+      // keep state if already set by JS later; just set initial label
+      followBtn.textContent = followBtn.textContent.includes("OFF") || followBtn.textContent.includes("AV")
+        ? t("btn_follow_off")
+        : t("btn_follow_on");
+    }
+
+    const resetBtn = document.getElementById("resetBtn");
+    if(resetBtn) resetBtn.textContent = t("btn_reset");
+
+    const hint = document.querySelector(".hud .hint");
+    if(hint) hint.innerHTML = t("hint_html");
+
+    const poiStatus = document.getElementById("poiStatus");
+    if(poiStatus) poiStatus.textContent = t("poi_loading_move");
+  })();
   // -----------------------
   // Icons (embedded PNG base64) - no folders/paths needed
   // -----------------------
@@ -511,7 +662,7 @@
       } else {
         destMarker.setLngLat(savedWp);
       }
-      setStatus("Waypoint lastet. Start GPS for rute.");
+      setStatus("Waypoint loaded. Start GPS to draw route.");
     }
 
     // Update icon sizes on zoom
@@ -614,7 +765,7 @@
       followUser = !followUser;
       lsSet("follow_user", followUser ? "1" : "0");
       syncFollowBtn();
-      setStatus(followUser ? "Follow me: på." : "Follow me: av.");
+      setStatus(followUser ? "Follow me: ON." : "Follow me: OFF.");
     });
   }
 
@@ -628,7 +779,7 @@
       syncFollowBtn();
       // Return to default view
       map.flyTo({ center:[10.75, 59.91], zoom:13 });
-      setStatus("Nullstilt.");
+      setStatus(t("reset_done"));
     });
   }
 
@@ -663,7 +814,7 @@
     const src = map.getSource("route");
     if(src) src.setData({ type:"FeatureCollection", features:[] });
     clearWaypointStorage();
-    setStatus("Waypoint fjernet.");
+    setStatus(t("waypoint_cleared"));
   }
   clearBtn.addEventListener("click", clearRouteAndWaypoint);
 
@@ -712,7 +863,7 @@
     }
 
     playUiChime();
-    setStatus("Home satt.");
+    setStatus(t("home_set"));
     playHomeSound();
   }
 
@@ -721,7 +872,7 @@
     clearHomeStorage();
     if(homeMarker){ homeMarker.remove(); homeMarker = null; }
     playUiChime(0.6);
-    setStatus("Home fjernet.");
+    setStatus(t("home_cleared"));
   }
 
   // ---- Simple "GTA-ish" chime (WebAudio; not copyrighted audio)
@@ -864,7 +1015,7 @@
   if(homeBtn){
     homeBtn.addEventListener("click", () => {
       if(!userLngLat){
-        setStatus("Start GPS først for Home.");
+        setStatus(t("start_gps_first_home"));
         playUiChime(0.6);
         return;
       }
@@ -876,7 +1027,7 @@
     homePickBtn.addEventListener("click", () => {
       pickingHome = !pickingHome;
       homePickBtn.textContent = pickingHome ? "Pick Home: ON (tap map)" : "Pick Home on map";
-      setStatus(pickingHome ? "Trykk på kartet for å sette Home." : "Home-picking av.");
+      setStatus(pickingHome ? "Tap the map to set Home." : "Home-picking av.");
       playUiChime();
     });
   }
@@ -891,20 +1042,20 @@
   // -----------------------
   gpsBtn.addEventListener("click", () => {
     if(!navigator.geolocation){
-      setStatus("GPS støttes ikke.");
+      setStatus(t("gps_not_supported"));
       return;
     }
 
     if(watchId !== null){
       navigator.geolocation.clearWatch(watchId);
       watchId = null;
-      gpsBtn.textContent = "Start GPS";
-      setStatus("GPS stoppet.");
+      gpsBtn.textContent = t("btn_start_gps");
+      setStatus(t("gps_stopped"));
       return;
     }
 
-    gpsBtn.textContent = "Stop GPS";
-    setStatus("Ber om posisjon…");
+    gpsBtn.textContent = t("btn_stop_gps");
+    setStatus(t("requesting_location"));
 
     watchId = navigator.geolocation.watchPosition(
       (pos) => {
@@ -915,7 +1066,7 @@
         const heading = (typeof pos.coords.heading === 'number' && !Number.isNaN(pos.coords.heading))
           ? pos.coords.heading : null;
 
-        setStatus(`Du er her: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+        setStatus(t("you_are_here",{lat: lat.toFixed(5), lng: lng.toFixed(5)}));
 
         if(!userMarker){
           userEl = createUserArrowEl();
@@ -940,7 +1091,7 @@
       },
       (err) => {
         setStatus("GPS-feil: " + err.message);
-        gpsBtn.textContent = "Start GPS";
+        gpsBtn.textContent = t("btn_start_gps");
         watchId = null;
       },
       { enableHighAccuracy: true, maximumAge: 1200, timeout: 10000 }
@@ -982,7 +1133,7 @@
   }
 
   async function drawRouteTo(dest, isAuto=false){
-    if(!userLngLat){ setStatus("Start GPS først."); return; }
+    if(!userLngLat){ setStatus(t("start_gps_first")); return; }
 
     const now = Date.now();
     const minGap = isAuto ? 2500 : 900;
@@ -1018,7 +1169,7 @@
       if(!isAuto){
         const distM = data.routes[0].distance;
         const mins = Math.max(1, Math.round(data.routes[0].duration / 60));
-        setStatus(`Waypoint satt. ~${mins} min • ${(distM/1000).toFixed(2)} km`);
+        setStatus(t("waypoint_set",{mins: mins, km: (distM/1000).toFixed(2)}));
       }
     } catch(e){
       setBusy(false);
@@ -1180,7 +1331,7 @@ out body 600;
     if(poiAbort) poiAbort.abort();
     poiAbort = new AbortController();
 
-    setPOIStatus("POI: laster…");
+    setPOIStatus(t("poi_loading"));
 
     try{
       const ref = getRefPoint();
@@ -1195,7 +1346,7 @@ out body 600;
       });
 
       if(!res.ok){
-        setPOIStatus("POI: feil/rate limit.");
+        setPOIStatus(t("poi_rate"));
         return;
       }
 
@@ -1256,10 +1407,10 @@ out body 600;
         poiMarkers.set(id, m);
       }
 
-      setPOIStatus(`POI: viser ${filtered.length} (nærmest deg).`);
+      setPOIStatus(t("poi_showing",{n: filtered.length}));
     } catch(e){
       if(e.name === "AbortError") return;
-      setPOIStatus("POI: feil.");
+      setPOIStatus(t("poi_error"));
     }
   }
 </script>
