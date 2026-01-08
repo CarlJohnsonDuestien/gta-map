@@ -349,8 +349,7 @@
     </div>
 
     <div class="hud-body" id="hudBody">
-      <div id="statusCoords">Tap Start GPS</div>
-    <div id="statusRoute" class="small" style="margin-top:6px; display:none;"></div>
+      <div id="status">Tap Start GPS</div>
 
     <div id="firstRun" class="first-run" style="display:none">
       <div class="fr-title">Tips</div>
@@ -494,8 +493,7 @@
     const toggle = document.getElementById("hudToggle");
     if(toggle) toggle.setAttribute("aria-label", t("aria_toggle"));
 
-    const statusCoordsEl = document.getElementById("statusCoords");
-  const statusRouteEl = document.getElementById("statusRoute");
+    const statusEl = document.getElementById("status");
     if(statusEl && statusEl.textContent.trim() === "Tap Start GPS") statusEl.textContent = t("status_tap_start");
 
     const frTitle = document.querySelector("#firstRun .fr-title");
@@ -676,8 +674,7 @@
   // -----------------------
   // UI state
   // -----------------------
-  const statusCoordsEl = document.getElementById("statusCoords");
-  const statusRouteEl = document.getElementById("statusRoute");
+  const statusEl = document.getElementById("status");
   const poiStatusEl = document.getElementById("poiStatus");
   const gpsBtn = document.getElementById("gpsBtn");
   const clearBtn = document.getElementById("clearBtn");
@@ -723,18 +720,7 @@
   let poiFetchTimer = null;
   let poiAbort = null;
 
-  function setCoordsStatus(t){ statusCoordsEl.textContent = t; }
-  function setRouteStatus(t){
-    if(!t){
-      statusRouteEl.style.display = "none";
-      statusRouteEl.textContent = "";
-      return;
-    }
-    statusRouteEl.style.display = "block";
-    statusRouteEl.textContent = t;
-  }
-  // Back-compat: existing calls that mean "general status" now update coords line
-  function setStatus(t){ setCoordsStatus(t); }
+  function setStatus(t){ statusEl.textContent = t; }
   function setPOIStatus(t){ poiStatusEl.textContent = t; }
 
   // -----------------------
@@ -787,7 +773,6 @@
   if(resetBtn){
     resetBtn.addEventListener("click", () => {
       clearRouteAndWaypoint();
-    setRouteStatus(null);
       clearHome();
       followUser = true;
       lsSet("follow_user", "1");
@@ -1072,40 +1057,7 @@
     gpsBtn.textContent = t("btn_stop_gps");
     setStatus(t("requesting_location"));
 
-    
-    // Quick first fix: try a one-shot position to center faster (some phones take time to start watchPosition)
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const lng = pos.coords.longitude;
-        const lat = pos.coords.latitude;
-        userLngLat = [lng, lat];
-
-        const heading = (typeof pos.coords.heading === 'number' && !Number.isNaN(pos.coords.heading))
-          ? pos.coords.heading : null;
-
-        setStatus(`${t("youAreHere")}: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
-
-        if(!userMarker){
-          userEl = createUserArrowEl();
-          userMarker = new maplibregl.Marker({ element: userEl })
-            .setLngLat(userLngLat)
-            .addTo(map);
-          map.flyTo({ center: userLngLat, zoom: 16 });
-        }else{
-          userMarker.setLngLat(userLngLat);
-        }
-
-        if(userEl && heading !== null){
-          userEl.style.transform = `rotate(${heading}deg)`;
-        }
-
-        schedulePOILoad();
-      },
-      () => { /* ignore; watchPosition will handle */ },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 6000 }
-    );
-
-watchId = navigator.geolocation.watchPosition(
+    watchId = navigator.geolocation.watchPosition(
       (pos) => {
         const lng = pos.coords.longitude;
         const lat = pos.coords.latitude;
