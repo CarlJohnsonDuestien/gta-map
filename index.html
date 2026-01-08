@@ -154,6 +154,51 @@
   margin-top:8px;
 }
 
+
+/* === Readability tweak (Vice HUD, but readable) === */
+.hud{
+  position: relative;
+  color: rgba(255,255,255,0.92);
+  text-shadow: 0 2px 10px rgba(0,0,0,0.35);
+}
+.hud::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius: inherit;
+  background: rgba(0,0,0,0.18);
+  pointer-events:none;
+}
+.hud > *{ position: relative; z-index:1; }
+
+.hud .hint, .hud .small{ color: rgba(255,255,255,0.88); }
+
+
+/* === HUD visibility fix (force overlay) === */
+.hud{
+  position:absolute !important;
+  top:12px !important;
+  left:12px !important;
+  z-index:10 !important;
+}
+
+/* === Readability boost (Vice but readable) === */
+.hud{
+  color: rgba(255,255,255,0.94) !important;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.45);
+}
+.hud::before{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:16px;
+  background: rgba(0,0,0,0.22); /* darken a touch */
+  pointer-events:none;
+}
+.hud .hint, .hud .small{
+  color: rgba(255,255,255,0.90) !important;
+}
+
 </style>
 </head>
 
@@ -347,6 +392,187 @@
     setStatus("Waypoint fjernet.");
   }
   clearBtn.addEventListener("click", clearRouteAndWaypoint);
+
+  // -----------------------
+  // Home / Spawn point + GTA-ish UI sounds
+  // -----------------------
+  const homeBtn = document.getElementById("homeBtn");
+  const homePickBtn = document.getElementById("homePickBtn");
+  const homeClearBtn = document.getElementById("homeClearBtn");
+
+  let homeLngLat = null;
+  let homeMarker = null;
+  let pickingHome = false;
+
+  function loadHome(){
+    try{
+      const raw = localStorage.getItem("gta_home");
+      if(!raw) return null;
+      const obj = JSON.parse(raw);
+      if(Array.isArray(obj) && obj.length === 2 && obj.every(n => typeof n === "number")){
+        return obj;
+      }
+      return null;
+    }catch(_){ return null; }
+  }
+
+  function saveHome(ll){
+    try{ localStorage.setItem("gta_home", JSON.stringify(ll)); }catch(_){}
+  }
+
+  function clearHomeStorage(){
+    try{ localStorage.removeItem("gta_home"); }catch(_){}
+  }
+
+  function createHomeEl(){
+    return wrapEl(createImgMarker(ICONS.home), "homepin");
+  }
+
+  function setHome(ll){
+    homeLngLat = ll;
+    saveHome(ll);
+
+    if(!homeMarker){
+      homeMarker = new maplibregl.Marker({ element: createHomeEl() })
+        .setLngLat(ll)
+        .addTo(map);
+    }else{
+      homeMarker.setLngLat(ll);
+    }
+
+    playUiChime();
+    setStatus("Home satt.");
+  }
+
+  function clearHome(){
+    homeLngLat = null;
+    clearHomeStorage();
+    if(homeMarker){ homeMarker.remove(); homeMarker = null; }
+    playUiChime(0.6);
+    setStatus("Home fjernet.");
+  }
+
+  // ---- Simple "GTA-ish" chime (WebAudio; not copyrighted audio)
+  let audioCtx = null;
+  function getAudio(){
+    if(!audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    return audioCtx;
+  }
+
+  function tone(freq, start, dur, gain){
+    const ctx = getAudio();
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    o.type = "triangle";
+    o.frequency.setValueAtTime(freq, start);
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.exponentialRampToValueAtTime(gain, start + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+    o.connect(g); g.connect(ctx.destination);
+    o.start(start);
+    o.stop(start + dur + 0.02);
+  }
+
+  function playUiChime(intensity=1){
+    try{
+      const ctx = getAudio();
+      const t0 = ctx.currentTime + 0.01;
+      tone(880,  t0,      0.12, 0.06*intensity);
+      tone(1320, t0+0.10, 0.10, 0.05*intensity);
+      if(navigator.vibrate) navigator.vibrate(15);
+    }catch(_){}
+  }
+
+  function playWaypointSound(){
+    // Inspired "mission marker" vibe (original synth, not a ripped sound)
+    try{
+      const ctx = getAudio();
+      const t0 = ctx.currentTime + 0.01;
+
+      // helper: pitch-bent tone
+      const bent = (type, f0, f1, start, dur, gain) => {
+        const o = ctx.createOscillator();
+        const g = ctx.createGain();
+        o.type = type;
+        o.frequency.setValueAtTime(f0, start);
+        o.frequency.exponentialRampToValueAtTime(f1, start + dur);
+        g.gain.setValueAtTime(0.0001, start);
+        g.gain.exponentialRampToValueAtTime(gain, start + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+        o.connect(g); g.connect(ctx.destination);
+        o.start(start);
+        o.stop(start + dur + 0.02);
+      };
+
+      // small "click" using filtered noise
+      const noiseDur = 0.04;
+      const bufferSize = Math.floor(ctx.sampleRate * noiseDur);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for(let i=0;i<bufferSize;i++){
+        data[i] = (Math.random()*2-1) * (1 - i/bufferSize);
+      }
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+      const bp = ctx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.setValueAtTime(2200, t0);
+      bp.Q.setValueAtTime(8, t0);
+      const ng = ctx.createGain();
+      ng.gain.setValueAtTime(0.0001, t0);
+      ng.gain.exponentialRampToValueAtTime(0.18, t0 + 0.005);
+      ng.gain.exponentialRampToValueAtTime(0.0001, t0 + noiseDur);
+      noise.connect(bp); bp.connect(ng); ng.connect(ctx.destination);
+      noise.start(t0);
+      noise.stop(t0 + noiseDur);
+
+      // main two-step "blip-blip" with a little glide
+      bent("square", 880, 740, t0 + 0.02, 0.10, 0.06);
+      bent("triangle", 1480, 1220, t0 + 0.10, 0.12, 0.045);
+
+      // soft sub thump
+      bent("sine", 120, 90, t0 + 0.02, 0.16, 0.03);
+
+      if(navigator.vibrate) navigator.vibrate([12, 28, 12]);
+    }catch(_){}
+  }
+
+  // Load saved home
+  const savedHome = loadHome();
+  if(savedHome){
+    homeLngLat = savedHome;
+    homeMarker = new maplibregl.Marker({ element: createHomeEl() })
+      .setLngLat(homeLngLat)
+      .addTo(map);
+  }
+
+  // Wire buttons
+  if(homeBtn){
+    homeBtn.addEventListener("click", () => {
+      if(!userLngLat){
+        setStatus("Start GPS først for Home.");
+        playUiChime(0.6);
+        return;
+      }
+      setHome(userLngLat);
+    });
+  }
+
+  if(homePickBtn){
+    homePickBtn.addEventListener("click", () => {
+      pickingHome = !pickingHome;
+      homePickBtn.textContent = pickingHome ? "Pick Home: ON (tap map)" : "Pick Home on map";
+      setStatus(pickingHome ? "Trykk på kartet for å sette Home." : "Home-picking av.");
+      playUiChime();
+    });
+  }
+
+  if(homeClearBtn){
+    homeClearBtn.addEventListener("click", clearHome);
+  }
+
 
   // -----------------------
   // GPS toggle
