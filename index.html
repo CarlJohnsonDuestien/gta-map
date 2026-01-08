@@ -14,6 +14,7 @@
   <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
 
   <style>
+    :root{ --poiSize:30px; --homeSize:28px; }
     html, body { height: 100%; margin: 0; }
     #map { height: 100%; width: 100%; }
 
@@ -51,11 +52,11 @@
 
     .marker-wrap { display:grid; place-items:center; user-select:none; }
     .shadow { filter: drop-shadow(0 2px 2px rgba(0,0,0,0.55)); }
-    .poi { width:30px; height:30px; }
+    .poi { width: var(--poiSize); height: var(--poiSize); }
     .userpin { width:26px; height:26px; }
     .waypoint { width:34px; height:34px; }
 
-    .homepin { width:28px; height:28px; }
+    .homepin { width: var(--homeSize); height: var(--homeSize); }
 
     .poi-img{
       width:100%;
@@ -316,6 +317,24 @@
   }
 }
 
+
+    .first-run{
+      margin-top:10px;
+      padding:10px;
+      border-radius:12px;
+      background: rgba(0,0,0,0.18);
+      border: 1px solid rgba(255,255,255,0.18);
+    }
+    .first-run .fr-title{ font-weight:900; margin-bottom:6px; }
+    .first-run .fr-text{ opacity:.92; line-height:1.35; font-size:12px; }
+    .first-run .fr-ok{ margin-top:8px; }
+    
+    @media (max-width: 480px){
+      .hud{ width:190px; padding:8px 8px; font-size:11px; }
+      .hud .title{ font-size:16px; }
+      .hud button{ padding:6px 8px; font-size:12px; }
+      .first-run .fr-text{ font-size:11px; }
+    }
 </style>
 </head>
 
@@ -332,11 +351,25 @@
     <div class="hud-body" id="hudBody">
       <div id="status">Trykk Start GPS</div>
 
+    <div id="firstRun" class="first-run" style="display:none">
+      <div class="fr-title">Tips</div>
+      <div class="fr-text">
+        • Trykk på kartet for waypoint<br>
+        • Sett Home for raskt “spawn”-punkt<br>
+        • Slå av “Follow me” hvis du vil utforske fritt
+      </div>
+      <button id="firstRunOk" class="btn-main fr-ok" type="button">OK</button>
+    </div>
+
       <button id="gpsBtn" class="btn-main">Start GPS</button>
       <button id="clearBtn" class="btn-alt">Clear waypoint</button>
     <button id="homeBtn" class="btn-alt">Set Home (GPS)</button>
     <button id="homePickBtn" class="btn-alt">Pick Home on map</button>
     <button id="homeClearBtn" class="btn-alt">Clear Home</button>
+
+
+    <button id="followBtn" class="btn-alt">Follow me: ON</button>
+    <button id="resetBtn" class="btn-alt">Reset / Clear all</button>
 
       <div class="hint">
         • Trykk på kartet for waypoint<br>
@@ -439,6 +472,15 @@
     zoom: 13
   });
 
+  // Stop follow when user drags the map
+  map.on("dragstart", () => {
+    if(followUser){
+      followUser = false;
+      try{ localStorage.setItem("follow_user","0"); }catch(e){}
+      if(typeof syncFollowBtn === "function") syncFollowBtn();
+    }
+  });
+
   map.on("load", () => {
     map.addSource("route", { type:"geojson", data:{ type:"FeatureCollection", features:[] } });
 
@@ -457,6 +499,25 @@
     });
 
     map.on("moveend", schedulePOILoad);
+
+    // Restore saved waypoint marker (if any)
+    const savedWp = loadWaypoint();
+    if(savedWp){
+      destLngLat = savedWp;
+      if(!destMarker){
+        destMarker = new maplibregl.Marker({ element: createWaypointEl() })
+          .setLngLat(savedWp)
+          .addTo(map);
+      } else {
+        destMarker.setLngLat(savedWp);
+      }
+      setStatus("Waypoint lastet. Start GPS for rute.");
+    }
+
+    // Update icon sizes on zoom
+    updateIconScale();
+    map.on("zoom", updateIconScale);
+
   });
 
   // -----------------------
@@ -466,6 +527,16 @@
   const poiStatusEl = document.getElementById("poiStatus");
   const gpsBtn = document.getElementById("gpsBtn");
   const clearBtn = document.getElementById("clearBtn");
+  const homeBtn = document.getElementById("homeBtn");
+  const homePickBtn = document.getElementById("homePickBtn");
+  const homeClearBtn = document.getElementById("homeClearBtn");
+  const followBtn = document.getElementById("followBtn");
+  const resetBtn = document.getElementById("resetBtn");
+
+  const firstRunEl = document.getElementById("firstRun");
+  const firstRunOk = document.getElementById("firstRunOk");
+
+
   const hudEl = document.getElementById("hud");
   const hudToggle = document.getElementById("hudToggle");
 
@@ -501,11 +572,97 @@
   function setStatus(t){ statusEl.textContent = t; }
   function setPOIStatus(t){ poiStatusEl.textContent = t; }
 
+  // -----------------------
+  // Persisted UI state
+  // -----------------------
+  function lsGet(key, fallback=null){
+    try{
+      const v = localStorage.getItem(key);
+      return (v === null || v === undefined) ? fallback : v;
+    }catch(e){ return fallback; }
+  }
+  function lsSet(key, value){
+    try{ localStorage.setItem(key, value); }catch(e){}
+  }
+  function lsDel(key){
+    try{ localStorage.removeItem(key); }catch(e){}
+  }
+
+  // First run tip (shown once)
+  (function initFirstRun(){
+    const seen = lsGet("seen_tip", "0");
+    if(seen !== "1" && firstRunEl){
+      firstRunEl.style.display = "block";
+    }
+    if(firstRunOk){
+      firstRunOk.addEventListener("click", () => {
+        if(firstRunEl) firstRunEl.style.display = "none";
+        lsSet("seen_tip", "1");
+      });
+    }
+  })();
+
+  // Follow-me (persisted)
+  let followUser = (lsGet("follow_user", "1") === "1");
+  function syncFollowBtn(){
+    if(!followBtn) return;
+    followBtn.textContent = `Follow me: ${followUser ? "ON" : "OFF"}`;
+  }
+  syncFollowBtn();
+  if(followBtn){
+    followBtn.addEventListener("click", () => {
+      followUser = !followUser;
+      lsSet("follow_user", followUser ? "1" : "0");
+      syncFollowBtn();
+      setStatus(followUser ? "Follow me: på." : "Follow me: av.");
+    });
+  }
+
+  // Reset / Clear all
+  if(resetBtn){
+    resetBtn.addEventListener("click", () => {
+      clearRouteAndWaypoint();
+      clearHome();
+      followUser = true;
+      lsSet("follow_user", "1");
+      syncFollowBtn();
+      // Return to default view
+      map.flyTo({ center:[10.75, 59.91], zoom:13 });
+      setStatus("Nullstilt.");
+    });
+  }
+
+  // Waypoint persistence
+  function saveWaypoint(ll){ lsSet("gta_waypoint", JSON.stringify(ll)); }
+  function loadWaypoint(){
+    try{
+      const raw = lsGet("gta_waypoint", null);
+      if(!raw) return null;
+      const ll = JSON.parse(raw);
+      if(Array.isArray(ll) && ll.length===2 && ll.every(n => typeof n==="number")) return ll;
+    }catch(e){}
+    return null;
+  }
+  function clearWaypointStorage(){ lsDel("gta_waypoint"); }
+
+  // Icon scaling by zoom
+  function clamp(x,a,b){ return Math.max(a, Math.min(b, x)); }
+  function updateIconScale(){
+    const z = map.getZoom();
+    // zoom 10 => 22px, zoom 16 => 34px
+    const poi = clamp(22 + (z-10)*(12/6), 20, 36);
+    const home = clamp(22 + (z-10)*(10/6), 20, 34);
+    document.documentElement.style.setProperty("--poiSize", poi.toFixed(1)+"px");
+    document.documentElement.style.setProperty("--homeSize", home.toFixed(1)+"px");
+  }
+
+
   function clearRouteAndWaypoint(){
     destLngLat = null;
     if(destMarker){ destMarker.remove(); destMarker = null; }
     const src = map.getSource("route");
     if(src) src.setData({ type:"FeatureCollection", features:[] });
+    clearWaypointStorage();
     setStatus("Waypoint fjernet.");
   }
   clearBtn.addEventListener("click", clearRouteAndWaypoint);
@@ -513,9 +670,6 @@
   // -----------------------
   // Home / Spawn point + GTA-ish UI sounds
   // -----------------------
-  const homeBtn = document.getElementById("homeBtn");
-  const homePickBtn = document.getElementById("homePickBtn");
-  const homeClearBtn = document.getElementById("homeClearBtn");
 
   let homeLngLat = null;
   let homeMarker = null;
@@ -773,6 +927,10 @@
           userMarker.setLngLat(userLngLat);
         }
 
+        if(followUser){
+          map.easeTo({ center: userLngLat, duration: 450, essential: true });
+        }
+
         if(userEl && heading !== null){
           userEl.style.transform = `rotate(${heading}deg)`;
         }
@@ -818,6 +976,11 @@
     drawRouteTo(ll, false);
   });
 
+  function setBusy(on){
+    const btns = [gpsBtn, clearBtn, homeBtn, homePickBtn, homeClearBtn, followBtn, resetBtn].filter(Boolean);
+    for(const b of btns) b.disabled = !!on;
+  }
+
   async function drawRouteTo(dest, isAuto=false){
     if(!userLngLat){ setStatus("Start GPS først."); return; }
 
@@ -835,9 +998,12 @@
       `?overview=full&geometries=geojson`;
 
     try{
+      if(!isAuto) setStatus("Laster rute…");
+      setBusy(true);
       const res = await fetch(url);
       const data = await res.json();
       if(!data.routes || !data.routes[0]){
+        setBusy(false);
         if(!isAuto) setStatus("Fant ingen rute.");
         return;
       }
@@ -847,12 +1013,15 @@
       const src = map.getSource("route");
       if(src) src.setData(fc);
 
+      setBusy(false);
+
       if(!isAuto){
         const distM = data.routes[0].distance;
         const mins = Math.max(1, Math.round(data.routes[0].duration / 60));
         setStatus(`Waypoint satt. ~${mins} min • ${(distM/1000).toFixed(2)} km`);
       }
     } catch(e){
+      setBusy(false);
       if(!isAuto) setStatus("Rute-feil.");
     }
   }
