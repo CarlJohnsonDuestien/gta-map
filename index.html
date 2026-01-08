@@ -350,6 +350,7 @@
 
     <div class="hud-body" id="hudBody">
       <div id="status">Tap Start GPS</div>
+      <div id="routeInfo" class="small" style="margin-top:6px; display:none;"></div>
 
     <div id="firstRun" class="first-run" style="display:none">
       <div class="fr-title">Tips</div>
@@ -423,6 +424,7 @@
       home_set: "Home set.",
       reset_done: "Reset complete.",
       you_are_here: "You are here: {lat}, {lng}",
+      route_stats: "To waypoint: ~{mins} min • {km} km",
       waypoint_set: "Waypoint set. ~{mins} min • {km} km",
       route_none: "No route found.",
       route_error: "Route error."
@@ -461,6 +463,7 @@
       home_set: "Home satt.",
       reset_done: "Nullstilt.",
       you_are_here: "Du er her: {lat}, {lng}",
+      route_stats: "Til waypoint: ~{mins} min • {km} km",
       waypoint_set: "Waypoint satt. ~{mins} min • {km} km",
       route_none: "Fant ingen rute.",
       route_error: "Rute-feil."
@@ -675,6 +678,7 @@
   // UI state
   // -----------------------
   const statusEl = document.getElementById("status");
+  const routeInfoEl = document.getElementById("routeInfo");
   const poiStatusEl = document.getElementById("poiStatus");
   const gpsBtn = document.getElementById("gpsBtn");
   const clearBtn = document.getElementById("clearBtn");
@@ -721,6 +725,12 @@
   let poiAbort = null;
 
   function setStatus(t){ statusEl.textContent = t; }
+  function setRouteInfo(t){
+    if(!routeInfoEl) return;
+    if(!t){ routeInfoEl.style.display = "none"; routeInfoEl.textContent = ""; return; }
+    routeInfoEl.textContent = t;
+    routeInfoEl.style.display = "block";
+  }
   function setPOIStatus(t){ poiStatusEl.textContent = t; }
 
   // -----------------------
@@ -813,6 +823,7 @@
     if(destMarker){ destMarker.remove(); destMarker = null; }
     const src = map.getSource("route");
     if(src) src.setData({ type:"FeatureCollection", features:[] });
+    setRouteInfo(null);
     clearWaypointStorage();
     setStatus(t("waypoint_cleared"));
   }
@@ -1133,49 +1144,55 @@
   }
 
   async function drawRouteTo(dest, isAuto=false){
-    if(!userLngLat){ setStatus(t("start_gps_first")); return; }
+  if(!userLngLat){ setStatus(t("start_gps_first")); return; }
 
-    const now = Date.now();
-    const minGap = isAuto ? 2500 : 900;
-    if(now - lastRouteAt < minGap) return;
-    lastRouteAt = now;
+  const now = Date.now();
+  const minGap = isAuto ? 2500 : 900;
+  if(now - lastRouteAt < minGap) return;
+  lastRouteAt = now;
 
-    const [uLng,uLat] = userLngLat;
-    const [dLng,dLat] = dest;
+  const [uLng,uLat] = userLngLat;
+  const [dLng,dLat] = dest;
 
-    const url =
-      `https://router.project-osrm.org/route/v1/walking/` +
-      `${uLng},${uLat};${dLng},${dLat}` +
-      `?overview=full&geometries=geojson`;
+  // Car routing (requested)
+  const url =
+    `https://router.project-osrm.org/route/v1/driving/` +
+    `${uLng},${uLat};${dLng},${dLat}` +
+    `?overview=full&geometries=geojson`;
 
-    try{
-      if(!isAuto) setStatus("Laster rute…");
-      setBusy(true);
-      const res = await fetch(url);
-      const data = await res.json();
-      if(!data.routes || !data.routes[0]){
-        setBusy(false);
-        if(!isAuto) setStatus("Fant ingen rute.");
-        return;
-      }
+  try{
+    setBusy(true);
+    const res = await fetch(url);
+    const data = await res.json();
+    setBusy(false);
 
-      const route = data.routes[0].geometry;
-      const fc = { type:"FeatureCollection", features:[{ type:"Feature", properties:{}, geometry:route }] };
-      const src = map.getSource("route");
-      if(src) src.setData(fc);
-
-      setBusy(false);
-
-      if(!isAuto){
-        const distM = data.routes[0].distance;
-        const mins = Math.max(1, Math.round(data.routes[0].duration / 60));
-        setStatus(t("waypoint_set",{mins: mins, km: (distM/1000).toFixed(2)}));
-      }
-    } catch(e){
-      setBusy(false);
-      if(!isAuto) setStatus("Rute-feil.");
+    if(!data.routes || !data.routes[0]){
+      if(!isAuto) setStatus(t("route_none"));
+      setRouteInfo(null);
+      return;
     }
+
+    const r = data.routes[0];
+    const route = r.geometry;
+
+    const fc = { type:"FeatureCollection", features:[{ type:"Feature", properties:{}, geometry:route }] };
+    const src = map.getSource("route");
+    if(src) src.setData(fc);
+
+    // Persist route stats under coordinates while waypoint exists
+    const distM = r.distance;
+    const mins = Math.max(1, Math.round(r.duration / 60));
+    const km = (distM/1000).toFixed(2);
+    setRouteInfo(t("route_stats", { mins, km }));
+
+    if(!isAuto){
+      setStatus(t("waypoint_set", { mins, km }));
+    }
+  } catch(e){
+    setBusy(false);
+    if(!isAuto) setStatus(t("route_error"));
   }
+}
 
   // -----------------------
   // POI loading
