@@ -14,14 +14,25 @@
 
     .hud{
       position:absolute; top:12px; left:12px; z-index:10;
-      background:rgba(0,0,0,.55); color:#fff;
-      padding:10px 12px; border-radius:10px;
+      color:#fff;
+      padding:12px 12px;
+      border-radius:16px;
       font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial;
-      font-size:12px; width:240px;
-      backdrop-filter: blur(6px);
-      border: 1px solid rgba(255,255,255,0.10);
+      font-size:12px;
+      width:260px;
+
+      /* Vice-ish glass */
+      background:
+        linear-gradient(180deg, rgba(30, 220, 255, 0.18), rgba(190, 60, 255, 0.10)),
+        rgba(0,0,0,0.42);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.14);
+      box-shadow:
+        0 12px 30px rgba(0,0,0,0.35),
+        0 0 0 1px rgba(0,0,0,0.10) inset;
     }
-    .hud .title{ font-weight:900; font-size:16px; margin-bottom:6px; }
+
+    .hud .title{ font-weight:900; font-size:18px; letter-spacing:0.3px; margin:0; }
     .hud button{
       width:100%; margin-top:6px; padding:8px 10px;
       border:0; border-radius:8px; cursor:pointer;
@@ -55,27 +66,82 @@
 
       image-rendering: crisp-edges;
     }
+  
+    /* HUD layout */
+    .hud-top{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom:10px;
+    }
+    .hud-toggle{
+      width:34px; height:34px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,0.18);
+      background:rgba(255,255,255,0.10);
+      color:#fff;
+      font-weight:900;
+      cursor:pointer;
+      line-height:1;
+    }
+    .hud-toggle:active{ transform: translateY(1px); }
+
+    /* Collapsible menu */
+    .hud.is-collapsed{
+      width:auto;
+      padding:10px;
+    }
+    .hud.is-collapsed .hud-body{ display:none; }
+    .hud.is-collapsed .title{ font-size:16px; }
+
+    /* Vice-ish map grade */
+    #vice-overlay{
+      position:absolute;
+      inset:0;
+      pointer-events:none;
+      z-index:2; /* over map, under HUD */
+      background:
+        radial-gradient(800px 500px at 20% 15%, rgba(255, 70, 200, 0.18), transparent 60%),
+        radial-gradient(900px 600px at 80% 25%, rgba(40, 220, 255, 0.22), transparent 60%),
+        linear-gradient(180deg, rgba(0, 210, 255, 0.08), rgba(170, 60, 255, 0.06));
+      mix-blend-mode: screen;
+      opacity:0.95;
+    }
+
+    /* Slight grade on the raster itself */
+    #map .maplibregl-canvas{
+      filter: saturate(1.25) contrast(1.08) brightness(1.02);
+    }
+
   </style>
 </head>
 
 <body>
   <div id="map"></div>
+  <div id="vice-overlay" aria-hidden="true"></div>
 
-  <div class="hud">
-    <div class="title">GTA-ish Map</div>
-    <div id="status">Trykk Start GPS</div>
-
-    <button id="gpsBtn" class="btn-main">Start GPS</button>
-    <button id="clearBtn" class="btn-alt">Clear waypoint</button>
-
-    <div class="hint">
-      • Trykk på kartet for waypoint<br>
-      • Lilla linje følger veiene (ingen navigasjon)<br>
-      • POI lastes når du zoomer inn (14+)
+  <div class="hud" id="hud">
+    <div class="hud-top">
+      <div class="title">GTA-ish Map</div>
+      <button id="hudToggle" class="hud-toggle" type="button" aria-label="Skjul/vis meny">✕</button>
     </div>
 
-    <div id="poiStatus" class="small">POI: zoom inn (14+)…</div>
-    <div class="attrib">© OpenStreetMap contributors • Basemap © CARTO • Routing: OSRM</div>
+    <div class="hud-body" id="hudBody">
+      <div id="status">Trykk Start GPS</div>
+
+      <button id="gpsBtn" class="btn-main">Start GPS</button>
+      <button id="clearBtn" class="btn-alt">Clear waypoint</button>
+
+      <div class="hint">
+        • Trykk på kartet for waypoint<br>
+        • Lilla linje følger veiene (ingen navigasjon)<br>
+        • POI lastes automatisk (flere når du zoomer inn)
+      </div>
+
+      <div id="poiStatus" class="small">POI: laster ved bevegelse…</div>
+      <div class="attrib">© OpenStreetMap contributors • Basemap © CARTO • Routing: OSRM</div>
+    </div>
   </div>
 
 <script>
@@ -193,6 +259,24 @@
   const poiStatusEl = document.getElementById("poiStatus");
   const gpsBtn = document.getElementById("gpsBtn");
   const clearBtn = document.getElementById("clearBtn");
+  const hudEl = document.getElementById("hud");
+  const hudToggle = document.getElementById("hudToggle");
+
+  // HUD collapse state
+  (function initHud(){
+    try{
+      const saved = localStorage.getItem("hudCollapsed");
+      if(saved === "1") hudEl.classList.add("is-collapsed");
+      hudToggle.textContent = hudEl.classList.contains("is-collapsed") ? "≡" : "✕";
+    }catch(e){}
+    hudToggle.addEventListener("click", () => {
+      hudEl.classList.toggle("is-collapsed");
+      const collapsed = hudEl.classList.contains("is-collapsed");
+      hudToggle.textContent = collapsed ? "≡" : "✕";
+      try{ localStorage.setItem("hudCollapsed", collapsed ? "1" : "0"); }catch(e){}
+    });
+  })();
+
 
   let watchId = null;
   let userLngLat = null;
@@ -346,6 +430,20 @@
     return [b.getSouth(), b.getWest(), b.getNorth(), b.getEast()];
   }
 
+  function getRefPoint(){
+    // Prefer GPS location; fall back to current map center
+    if(userLngLat) return userLngLat;
+    const c = map.getCenter();
+    return [c.lng, c.lat];
+  }
+
+  function bboxAroundPoint(pointLngLat, maxMeters){
+    const [lng, lat] = pointLngLat;
+    const dLat = maxMeters / 111320;
+    const dLng = maxMeters / (111320 * Math.cos(lat * Math.PI/180));
+    return [lat - dLat, lng - dLng, lat + dLat, lng + dLng]; // [s,w,n,e]
+  }
+
   function overpassQuery([s,w,n,e]){
     return `
 [out:json][timeout:20];
@@ -378,6 +476,49 @@ out body 600;
     const lat2 = toRad(b[1]);
     const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
     return 2*R*Math.asin(Math.min(1, Math.sqrt(h)));
+  }
+
+  // Remove near-duplicates (e.g. ATM clusters). Dedupe per kind.
+  function dedupeByProximity(items, metersByKind){
+    const ref = getRefPoint();
+    const refLat = ref[1];
+
+    const out = [];
+    const gridMaps = new Map(); // kind -> Map(cellKey -> keptItem)
+
+    for(const it of items){
+      const kind = it.k;
+      const minMeters = metersByKind[kind] ?? metersByKind.default ?? 35;
+
+      // Grid size approx minMeters, computed using ref latitude for stability
+      const cellLat = minMeters / 111320;
+      const cellLng = minMeters / (111320 * Math.cos(refLat * Math.PI/180));
+
+      const gx = Math.floor(it.el.lon / cellLng);
+      const gy = Math.floor(it.el.lat / cellLat);
+      const cellKey = gx + ":" + gy;
+
+      if(!gridMaps.has(kind)) gridMaps.set(kind, new Map());
+      const cellMap = gridMaps.get(kind);
+
+      if(!cellMap.has(cellKey)){
+        cellMap.set(cellKey, it);
+        out.push(it);
+        continue;
+      }
+
+      // Keep the one closer to ref (so list stays relevant)
+      const cur = cellMap.get(cellKey);
+      const d1 = haversineMeters(ref, [it.el.lon, it.el.lat]);
+      const d2 = haversineMeters(ref, [cur.el.lon, cur.el.lat]);
+      if(d1 < d2){
+        // Replace in out array
+        cellMap.set(cellKey, it);
+        const idx = out.indexOf(cur);
+        if(idx >= 0) out[idx] = it;
+      }
+    }
+    return out;
   }
 
   function poiKind(tags){
@@ -421,14 +562,7 @@ out body 600;
   }
 
   async function loadPOIsInView(){
-    if(map.getZoom() < 14){
-      setPOIStatus("POI: zoom inn (14+)…");
-      return;
-    }
-    if(!userLngLat){
-      setPOIStatus("POI: start GPS for best resultat.");
-      return;
-    }
+    /* No GPS? We still load POI around the map center. */
 
     if(poiAbort) poiAbort.abort();
     poiAbort = new AbortController();
@@ -436,7 +570,10 @@ out body 600;
     setPOIStatus("POI: laster…");
 
     try{
-      const q = overpassQuery(bbox());
+      const ref = getRefPoint();
+      const z = map.getZoom();
+      const radius = (z < 11) ? 1800 : (z < 13) ? 3000 : (z < 15) ? 5000 : 7500;
+      const q = overpassQuery(bboxAroundPoint(ref, radius));
       const res = await fetch("https://overpass-api.de/api/interpreter", {
         method:"POST",
         body:q,
@@ -459,10 +596,13 @@ out body 600;
           return k ? { el, k } : null;
         })
         .filter(Boolean)
-        .map(x => ({ ...x, dist: haversineMeters(userLngLat, [x.el.lon, x.el.lat]) }))
+        .map(x => ({ ...x, dist: haversineMeters(getRefPoint(), [x.el.lon, x.el.lat]) }))
         .sort((a,b) => a.dist - b.dist);
 
-      const MAX_POI = 55;
+      const METERS_BY_KIND = { bank: 55, default: 35 };
+      filtered = dedupeByProximity(filtered, METERS_BY_KIND);
+
+      const MAX_POI = 100;
       filtered = filtered.slice(0, MAX_POI);
 
       const seen = new Set(filtered.map(x => `n${x.el.id}`));
