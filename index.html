@@ -1064,6 +1064,21 @@ button{font-family:inherit}
     rgba(241,210,173,.30)) !important;
 }
 </style>
+
+<style id="vice-v8-mobile-layout">
+/* V8: keep search, location HUD and menu from overlapping on phones */
+@media (max-width:700px){
+  .vice-topbar{position:fixed!important;top:8px!important;left:8px!important;right:auto!important;height:auto!important;z-index:50!important;pointer-events:none!important}
+  .vice-location-card{position:relative!important;top:auto!important;left:auto!important;width:min(205px,calc(100vw - 24px))!important;box-sizing:border-box!important;z-index:51!important;pointer-events:auto!important}
+  .gps-search-wrap{top:82px!important;z-index:60!important}
+  .gps-search{position:relative!important;z-index:61!important}
+  .search-results{z-index:62!important}
+  .hud{z-index:40!important;bottom:10px!important;top:auto!important;max-height:calc(100vh - 190px)!important}
+  .hud-body{max-height:calc(100vh - 270px)!important}
+  .hud-toggle{position:relative!important;z-index:5!important}
+}
+</style>
+
 </head>
 
 <body>
@@ -1275,7 +1290,83 @@ button{font-family:inherit}
       observer.observe(poi,{childList:true,subtree:true,characterData:true});
     }
   })();
-  </script>\n<script>\n/* Location card: local clock + city + reverse-geocoded street address */\n(function(){\n  const timeEl=document.getElementById('viceLocationTime');\n  const cityEl=document.getElementById('viceLocationCity');\n  const addressEl=document.getElementById('viceLocationAddress');\n  let locationTimeZone=null;\n  function renderClock(){\n    if(!timeEl) return;\n    try{\n      const opts={hour:'2-digit',minute:'2-digit',hour12:false};\n      if(locationTimeZone) opts.timeZone=locationTimeZone;\n      timeEl.textContent=new Intl.DateTimeFormat([],opts).format(new Date());\n    }catch(e){\n      const d=new Date(); timeEl.textContent=[d.getHours(),d.getMinutes()].map(n=>String(n).padStart(2,'0')).join(':');\n    }\n  }\n  renderClock(); setInterval(renderClock,1000);\n  window.__viceUpdateLocationCard=async function(lat,lng){\n    if(!Number.isFinite(lat)||!Number.isFinite(lng)) return;\n    try{\n      const r=await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+encodeURIComponent(lat)+'&lon='+encodeURIComponent(lng)+'&zoom=18&addressdetails=1',{headers:{'Accept':'application/json'}});\n      if(!r.ok) throw new Error('reverse '+r.status);\n      const d=await r.json(); const a=d.address||{};\n      const city=a.city||a.town||a.village||a.municipality||a.county||'Current location';\n      const road=a.road||a.pedestrian||a.footway||a.residential||'';\n      const house=a.house_number||'';\n      const district=a.suburb||a.neighbourhood||'';\n      const line=[road,house].filter(Boolean).join(' ');\n      cityEl.textContent=city;\n      addressEl.textContent=line || district || d.display_name || 'Current location';\n      // Ask a lightweight timezone service for the actual local clock at the GPS coordinates.\n      try{\n        const tr=await fetch('https://timeapi.io/api/time/current/coordinate?latitude='+encodeURIComponent(lat)+'&longitude='+encodeURIComponent(lng));\n        if(tr.ok){ const td=await tr.json(); if(td.timeZone) locationTimeZone=td.timeZone; }\n      }catch(e){}\n      renderClock();\n    }catch(e){\n      cityEl.textContent='Location found';\n      addressEl.textContent=lat.toFixed(5)+', '+lng.toFixed(5);\n    }\n  };\n})();\n</script>
+  </script>\n<script>
+/* V8 location HUD: clock always runs; GPS location is requested automatically. */
+(function(){
+  const timeEl=document.getElementById('viceLocationTime');
+  const cityEl=document.getElementById('viceLocationCity');
+  const addressEl=document.getElementById('viceLocationAddress');
+  let locationTimeZone=(Intl.DateTimeFormat().resolvedOptions().timeZone||null);
+  let lastCoords=null;
+
+  function renderClock(){
+    if(!timeEl) return;
+    try{
+      const opts={hour:'2-digit',minute:'2-digit',hour12:false};
+      if(locationTimeZone) opts.timeZone=locationTimeZone;
+      timeEl.textContent=new Intl.DateTimeFormat([],opts).format(new Date());
+    }catch(e){
+      const d=new Date();
+      timeEl.textContent=[d.getHours(),d.getMinutes()].map(n=>String(n).padStart(2,'0')).join(':');
+    }
+  }
+  renderClock();
+  setInterval(renderClock,1000);
+
+  function setWaiting(){
+    if(cityEl) cityEl.textContent='LOCATING…';
+    if(addressEl) addressEl.textContent='Waiting for your location';
+  }
+
+  async function reverseGeocode(lat,lng){
+    try{
+      const url='https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat='+encodeURIComponent(lat)+'&lon='+encodeURIComponent(lng)+'&zoom=18&addressdetails=1&accept-language=en';
+      const r=await fetch(url,{headers:{'Accept':'application/json'}});
+      if(!r.ok) throw new Error('reverse '+r.status);
+      const d=await r.json();
+      const a=d.address||{};
+      const city=a.city||a.town||a.village||a.municipality||a.city_district||a.county||'Current location';
+      const road=a.road||a.pedestrian||a.footway||a.residential||a.path||'';
+      const house=a.house_number||'';
+      const line=[road,house].filter(Boolean).join(' ');
+      if(cityEl) cityEl.textContent=city.toUpperCase();
+      if(addressEl) addressEl.textContent=line || a.suburb || a.neighbourhood || d.display_name || (lat.toFixed(5)+', '+lng.toFixed(5));
+    }catch(e){
+      if(cityEl) cityEl.textContent='LOCATION FOUND';
+      if(addressEl) addressEl.textContent=lat.toFixed(5)+', '+lng.toFixed(5);
+    }
+  }
+
+  window.__viceUpdateLocationCard=async function(lat,lng){
+    if(!Number.isFinite(lat)||!Number.isFinite(lng)) return;
+    lastCoords=[lat,lng];
+    renderClock();
+    await reverseGeocode(lat,lng);
+  };
+
+  function requestCardLocation(){
+    if(!navigator.geolocation){
+      if(cityEl) cityEl.textContent='LOCATION UNSUPPORTED';
+      if(addressEl) addressEl.textContent='GPS is not available in this browser';
+      return;
+    }
+    setWaiting();
+    navigator.geolocation.getCurrentPosition(
+      pos=>window.__viceUpdateLocationCard(pos.coords.latitude,pos.coords.longitude),
+      err=>{
+        if(cityEl) cityEl.textContent='LOCATION UNAVAILABLE';
+        if(addressEl){
+          addressEl.textContent = err && err.code===1 ? 'Allow location access to show your address' : 'Waiting for GPS signal';
+        }
+      },
+      {enableHighAccuracy:true,maximumAge:60000,timeout:15000}
+    );
+  }
+
+  /* Request only the small location card automatically; the full GPS route mode remains manual. */
+  setTimeout(requestCardLocation,250);
+})();
+</script>
 
 <script>
 
