@@ -379,7 +379,7 @@
       • Set Home: use GPS or pick on the map
       </div>
 
-      <button type="button" id="poiReloadBtn" class="btn-alt poi-reload-btn">Reload POI</button>
+      <button type="button" id="poiReloadBtn" class="btn-alt" style="margin-top:6px">Reload POI</button>
       <div id="poiStatus" class="small">POI: loading on movement…</div>
       <div class="attrib">© OpenStreetMap contributors • Basemap © CARTO • Routing: OSRM</div>
     </div>
@@ -1198,11 +1198,11 @@
 }
 
   // -----------------------
-  // POI loading
+  // POI loading — stable production version
   // -----------------------
   function schedulePOILoad(){
     if(poiFetchTimer) clearTimeout(poiFetchTimer);
-    poiFetchTimer = setTimeout(loadPOIsInView, 900);
+    poiFetchTimer = setTimeout(() => loadPOIsInView(false), 1200);
   }
 
   function bbox(){
@@ -1211,115 +1211,95 @@
   }
 
   function getRefPoint(){
-    // Prefer GPS location; fall back to current map center
     if(userLngLat) return userLngLat;
     const c = map.getCenter();
     return [c.lng, c.lat];
   }
 
   function bboxAroundPoint(pointLngLat, maxMeters){
-    const [lng, lat] = pointLngLat;
+    const [lng,lat] = pointLngLat;
     const dLat = maxMeters / 111320;
-    const dLng = maxMeters / (111320 * Math.cos(lat * Math.PI/180));
-    return [lat - dLat, lng - dLng, lat + dLat, lng + dLng]; // [s,w,n,e]
+    const dLng = maxMeters / (111320 * Math.max(0.25,Math.cos(lat*Math.PI/180)));
+    return [lat-dLat,lng-dLng,lat+dLat,lng+dLng];
   }
 
+  /*
+   * IMPORTANT:
+   * The old app depended on overpass-api.de. Public Overpass instances
+   * can throttle/block repeated browser requests. Current OSM documentation
+   * lists several global public instances, including VK Maps and private.coffee.
+   * We therefore try the mirrors in sequence and use GET, which avoids the
+   * unnecessary POST/preflight dependency in mobile browsers.
+   */
   function overpassQuery([s,w,n,e]){
-    return `
-[out:json][timeout:20];
+    return `[out:json][timeout:15];
 (
-  node["amenity"="fast_food"](${s},${w},${n},${e});
-  node["amenity"="nightclub"](${s},${w},${n},${e});
-  node["amenity"="bar"](${s},${w},${n},${e});
-  node["amenity"="pub"](${s},${w},${n},${e});
+  nwr["amenity"="fast_food"]["name"](${s},${w},${n},${e});
+  nwr["amenity"="nightclub"]["name"](${s},${w},${n},${e});
+  nwr["amenity"="bar"]["name"](${s},${w},${n},${e});
+  nwr["amenity"="pub"]["name"](${s},${w},${n},${e});
 
-  node["shop"="supermarket"](${s},${w},${n},${e});
-  node["shop"="convenience"](${s},${w},${n},${e});
-  node["amenity"="fuel"](${s},${w},${n},${e});
+  nwr["shop"="supermarket"]["name"](${s},${w},${n},${e});
+  nwr["shop"="convenience"]["name"](${s},${w},${n},${e});
+  nwr["amenity"="fuel"]["name"](${s},${w},${n},${e});
 
-  node["shop"="clothes"](${s},${w},${n},${e});
-  node["amenity"="hospital"](${s},${w},${n},${e});
-  node["amenity"="parking"](${s},${w},${n},${e});
-  node["amenity"="police"](${s},${w},${n},${e});
+  nwr["shop"="clothes"]["name"](${s},${w},${n},${e});
+  nwr["amenity"="hospital"]["name"](${s},${w},${n},${e});
+  nwr["amenity"="parking"]["name"](${s},${w},${n},${e});
+  nwr["amenity"="police"]["name"](${s},${w},${n},${e});
 
-  node["amenity"="bank"](${s},${w},${n},${e});
-  node["amenity"="atm"](${s},${w},${n},${e});
+  nwr["amenity"="bank"]["name"](${s},${w},${n},${e});
+  nwr["amenity"="atm"]["name"](${s},${w},${n},${e});
 );
-out body 600;
-`;
+out center tags;`;
   }
 
-  function haversineMeters(a, b){
-    const toRad = x => x*Math.PI/180;
-    const R = 6371000;
-    const dLat = toRad(b[1]-a[1]);
-    const dLon = toRad(b[0]-a[0]);
-    const lat1 = toRad(a[1]);
-    const lat2 = toRad(b[1]);
-    const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
-    return 2*R*Math.asin(Math.min(1, Math.sqrt(h)));
+  function haversineMeters(a,b){
+    const R=6371000, toRad=x=>x*Math.PI/180;
+    const dLat=toRad(b[1]-a[1]), dLon=toRad(b[0]-a[0]);
+    const lat1=toRad(a[1]), lat2=toRad(b[1]);
+    const h=Math.sin(dLat/2)**2+
+      Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+    return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));
   }
 
-  // Remove near-duplicates (e.g. ATM clusters). Dedupe per kind.
-  function dedupeByProximity(items, metersByKind){
-    const ref = getRefPoint();
-    const refLat = ref[1];
+  function elementPoint(el){
+    if(el.type==="node" && Number.isFinite(el.lon) && Number.isFinite(el.lat))
+      return [el.lon,el.lat];
+    if(el.center && Number.isFinite(el.center.lon) && Number.isFinite(el.center.lat))
+      return [el.center.lon,el.center.lat];
+    return null;
+  }
 
-    const out = [];
-    const gridMaps = new Map(); // kind -> Map(cellKey -> keptItem)
-
-    for(const it of items){
-      const kind = it.k;
-      const minMeters = metersByKind[kind] ?? metersByKind.default ?? 35;
-
-      // Grid size approx minMeters, computed using ref latitude for stability
-      const cellLat = minMeters / 111320;
-      const cellLng = minMeters / (111320 * Math.cos(refLat * Math.PI/180));
-
-      const gx = Math.floor(it.el.lon / cellLng);
-      const gy = Math.floor(it.el.lat / cellLat);
-      const cellKey = gx + ":" + gy;
-
-      if(!gridMaps.has(kind)) gridMaps.set(kind, new Map());
-      const cellMap = gridMaps.get(kind);
-
-      if(!cellMap.has(cellKey)){
-        cellMap.set(cellKey, it);
-        out.push(it);
-        continue;
+  function dedupeByProximity(items){
+    const out=[];
+    for(const item of items){
+      const p=elementPoint(item.el);
+      if(!p) continue;
+      let close=false;
+      for(const existing of out){
+        const ep=elementPoint(existing.el);
+        if(ep && haversineMeters(p,ep)<45){
+          close=true;
+          break;
+        }
       }
-
-      // Keep the one closer to ref (so list stays relevant)
-      const cur = cellMap.get(cellKey);
-      const d1 = haversineMeters(ref, [it.el.lon, it.el.lat]);
-      const d2 = haversineMeters(ref, [cur.el.lon, cur.el.lat]);
-      if(d1 < d2){
-        // Replace in out array
-        cellMap.set(cellKey, it);
-        const idx = out.indexOf(cur);
-        if(idx >= 0) out[idx] = it;
-      }
+      if(!close) out.push(item);
+      if(out.length>=80) break;
     }
     return out;
   }
 
   function poiKind(tags){
-    if(tags.amenity === "fast_food") return "fast_food";
-    if(tags.amenity === "nightclub") return "nightclub";
-    if(tags.amenity === "bar") return "nightclub";
-    if(tags.amenity === "pub") return "nightclub";
-
-    if(tags.shop === "supermarket") return "storeFuelConvenienceSupermarket";
-    if(tags.shop === "convenience") return "storeFuelConvenienceSupermarket";
-    if(tags.amenity === "fuel") return "storeFuelConvenienceSupermarket";
-
-    if(tags.shop === "clothes") return "clothes";
-    if(tags.amenity === "hospital") return "hospital";
-    if(tags.amenity === "parking") return "parking";
-    if(tags.amenity === "police") return "police";
-
-    if(tags.amenity === "bank" || tags.amenity === "atm") return "bank";
-
+    if(tags.amenity==="fast_food") return "fast_food";
+    if(tags.amenity==="nightclub" || tags.amenity==="bar" || tags.amenity==="pub") return "nightclub";
+    if(tags.shop==="supermarket" || tags.shop==="convenience" || tags.amenity==="fuel")
+      return "storeFuelConvenienceSupermarket";
+    if(tags.shop==="clothes") return "clothes";
+    if(tags.amenity==="hospital") return "hospital";
+    if(tags.amenity==="parking") return "parking";
+    if(tags.amenity==="police") return "police";
+    if(tags.amenity==="bank" || tags.amenity==="atm") return "bank";
     return null;
   }
 
@@ -1336,43 +1316,155 @@ out body 600;
     })[k] || "POI";
   }
 
-  function escapeHtml(str){
-    return String(str)
-      .replaceAll('&','&amp;')
-      .replaceAll('<','&lt;')
-      .replaceAll('>','&gt;')
-      .replaceAll('"','&quot;')
-      .replaceAll("'","&#039;");
+  function poiPoint(el){
+    return elementPoint(el);
+  }
+
+  function clearPOIMarkers(){
+    for(const [id, marker] of poiMarkers.entries()){
+      try{ marker.remove(); }catch(e){}
+    }
+    poiMarkers.clear();
+  }
+
+  function clearPOIsOutsideBounds(){
+    const b=map.getBounds();
+    for(const [id,marker] of poiMarkers.entries()){
+      const p=marker.getLngLat();
+      if(!b.contains([p.lng,p.lat])){
+        marker.remove();
+        poiMarkers.delete(id);
+      }
+    }
+  }
+
+  async function requestOverpass(query){
+    const encoded=encodeURIComponent(query);
+
+    // VK Maps is currently documented by OSM as a global public instance
+    // and is useful as the first browser fallback.
+    const endpoints=[
+      "https://maps.mail.ru/osm/tools/overpass/api/interpreter?data="+encoded,
+      "https://overpass.private.coffee/api/interpreter?data="+encoded,
+      "https://overpass-api.de/api/interpreter?data="+encoded
+    ];
+
+    let lastStatus=0;
+
+    for(const url of endpoints){
+      const controller=new AbortController();
+      const timer=setTimeout(()=>controller.abort(),18000);
+
+      try{
+        const res=await fetch(url,{
+          method:"GET",
+          signal:controller.signal,
+          headers:{"Accept":"application/json"},
+          cache:"no-store"
+        });
+
+        lastStatus=res.status;
+
+        if(res.ok){
+          const data=await res.json();
+          return {data,endpoint:url};
+        }
+      }catch(e){
+        if(e.name==="AbortError" && poiAbort?.signal.aborted) throw e;
+      }finally{
+        clearTimeout(timer);
+      }
+    }
+
+    throw new Error("Overpass HTTP "+lastStatus);
   }
 
   async function loadPOIsInView(force=false){
     if(poiAbort) poiAbort.abort();
-    poiAbort = new AbortController();
-    const btn=document.getElementById("poiReloadBtn");
-    if(btn){btn.disabled=true;btn.textContent="Loading POI…";}
-    setPOIStatus(t("poi_loading"));
-    const endpoints=["https://overpass-api.de/api/interpreter","https://overpass.private.coffee/api/interpreter","https://overpass.kumi.systems/api/interpreter"];
+    poiAbort=new AbortController();
+
+    setPOIStatus("POI: loading…");
+
     try{
-      const ref=getRefPoint(), z=map.getZoom(); let box;
-      if(force){
-        const b=map.getBounds(), c=map.getCenter(); const latSpan=z<13?0.025:z<15?0.018:0.012; const cosLat=Math.max(0.25,Math.cos(c.lat*Math.PI/180)); const lngSpan=latSpan/cosLat;
-        box=[Math.max(b.getSouth(),c.lat-latSpan),Math.max(b.getWest(),c.lng-lngSpan),Math.min(b.getNorth(),c.lat+latSpan),Math.min(b.getEast(),c.lng+lngSpan)];
-      }else{ const radius=z<11?1800:z<13?3000:z<15?5000:7500; box=bboxAroundPoint(ref,radius); }
-      const q=overpassQuery(box); let data=null,lastError=null;
-      for(const endpoint of endpoints){ try{ const res=await fetch(endpoint,{method:"POST",body:q,signal:poiAbort.signal,headers:{"Content-Type":"text/plain;charset=UTF-8","Accept":"application/json"},cache:"no-store"}); if(res.ok){data=await res.json();break;} lastError=new Error("HTTP "+res.status); }catch(e){if(e.name==="AbortError")throw e;lastError=e;} }
-      if(!data){ const encoded=encodeURIComponent(q); for(const endpoint of endpoints){ try{ const res=await fetch(endpoint+"?data="+encoded,{signal:poiAbort.signal,headers:{"Accept":"application/json"},cache:"no-store"}); if(res.ok){data=await res.json();break;} lastError=new Error("GET HTTP "+res.status); }catch(e){if(e.name==="AbortError")throw e;lastError=e;} } }
-      if(!data)throw lastError||new Error("Overpass unavailable");
-      const elements=Array.isArray(data.elements)?data.elements:[];
-      let filtered=elements.filter(el=>el&&el.tags&&(el.tags.name||el.tags.brand||el.tags.amenity==="bar"||el.tags.amenity==="pub")).map(el=>{const k=poiKind(el.tags);return k?{el,k}:null;}).filter(Boolean).map(x=>({...x,dist:haversineMeters(getRefPoint(),[x.el.lon,x.el.lat])})).sort((a,b)=>a.dist-b.dist);
-      filtered=dedupeByProximity(filtered,{bank:55,default:35}).slice(0,100);
-      if(force){for(const marker of poiMarkers.values())marker.remove();poiMarkers.clear();}else{const seen=new Set(filtered.map(x=>`n${x.el.id}`));for(const [id,marker] of poiMarkers.entries()){if(!seen.has(id)){marker.remove();poiMarkers.delete(id);}}}
-      for(const item of filtered){ const el=item.el,id=`n${el.id}`; if(poiMarkers.has(id))continue; const name=el.tags.name||el.tags.brand||"(uten navn)",k=item.k; const markerEl=wrapEl(createImgMarker(ICONS[k]),"poi"); const m=new maplibregl.Marker({element:markerEl}).setLngLat([el.lon,el.lat]).addTo(map); markerEl.addEventListener("click",ev=>{ev.stopPropagation();new maplibregl.Popup({closeButton:true,closeOnClick:true}).setLngLat([el.lon,el.lat]).setHTML(`<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;font-size:13px"><div style="font-weight:900;margin-bottom:4px">${escapeHtml(name)}</div><div style="opacity:.75">${escapeHtml(labelFromKind(k))}</div></div>`).addTo(map);}); poiMarkers.set(id,m); }
-      setPOIStatus(t("poi_showing",{n:filtered.length})+(force?" • current area":""));
-    }catch(e){if(e.name!=="AbortError")setPOIStatus("POI error: "+(e.message||"Overpass unavailable"));}finally{if(btn){btn.disabled=false;btn.textContent="Reload POI";}}
+      const ref=getRefPoint();
+      const z=map.getZoom();
+
+      // Don't query the entire country when zoomed out.
+      if(z<11){
+        clearPOIMarkers();
+        setPOIStatus("POI: zoom in to load places.");
+        return;
+      }
+
+      const radius=z<13 ? 2200 : z<15 ? 3500 : 5000;
+      const query=overpassQuery(bboxAroundPoint(ref,radius));
+      const result=await requestOverpass(query);
+      const elements=Array.isArray(result.data.elements) ? result.data.elements : [];
+
+      let items=elements.map(el=>{
+        const point=elementPoint(el);
+        const kind=el?.tags ? poiKind(el.tags) : null;
+        const name=el?.tags?.name || el?.tags?.brand;
+        if(!point || !kind || !name) return null;
+        return {el,kind,point,name,dist:haversineMeters(ref,point)};
+      }).filter(Boolean);
+
+      items.sort((a,b)=>a.dist-b.dist);
+      items=dedupeByProximity(items).slice(0,60);
+
+      // Every reload represents the current area. Remove the previous set.
+      clearPOIMarkers();
+
+      for(const item of items){
+        const id=`${item.el.type}-${item.el.id}`;
+        const markerEl=wrapEl(createImgMarker(ICONS[item.kind]),"poi");
+
+        const marker=new maplibregl.Marker({
+          element:markerEl,
+          anchor:"center"
+        }).setLngLat(item.point).addTo(map);
+
+        markerEl.addEventListener("click",ev=>{
+          ev.stopPropagation();
+          new maplibregl.Popup({closeButton:true,closeOnClick:true})
+            .setLngLat(item.point)
+            .setHTML(`
+              <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;font-size:13px">
+                <div style="font-weight:900;margin-bottom:4px">${escapeHtml(item.name)}</div>
+                <div style="opacity:.75">${escapeHtml(labelFromKind(item.kind))}</div>
+              </div>
+            `)
+            .addTo(map);
+        });
+
+        poiMarkers.set(id,marker);
+      }
+
+      setPOIStatus(`POI: ${items.length} loaded`);
+    }catch(e){
+      if(e.name==="AbortError") return;
+      console.error("POI load failed:",e);
+      setPOIStatus("POI: API unavailable ("+(e.message||"error")+")");
+    }
   }
+
+  // Manual reload is intentionally the primary POI control.
   const poiReloadBtn=document.getElementById("poiReloadBtn");
-  if(poiReloadBtn)poiReloadBtn.addEventListener("click",()=>loadPOIsInView(true));
-  if(map.loaded())setTimeout(()=>loadPOIsInView(false),700);else map.once("load",()=>setTimeout(()=>loadPOIsInView(false),700));
+  if(poiReloadBtn){
+    poiReloadBtn.addEventListener("click",()=>loadPOIsInView(true));
+  }
+
+  // Do not spam Overpass while dragging. One request after movement settles.
+  map.on("moveend",()=>{
+    clearPOIsOutsideBounds();
+    schedulePOILoad();
+  });
+
+  map.on("load",()=>{
+    setTimeout(()=>loadPOIsInView(false),1200);
+  });
+
+  function escapeHtml(str){return String(str).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;");}
 
 </script>
 </body>
