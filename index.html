@@ -379,6 +379,7 @@
       • Set Home: use GPS or pick on the map
       </div>
 
+      <button type="button" id="poiReloadBtn" class="btn-alt poi-reload-btn">Reload POI</button>
       <div id="poiStatus" class="small">POI: loading on movement…</div>
       <div class="attrib">© OpenStreetMap contributors • Basemap © CARTO • Routing: OSRM</div>
     </div>
@@ -1344,94 +1345,35 @@ out body 600;
       .replaceAll("'","&#039;");
   }
 
-  async function loadPOIsInView(){
-    /* No GPS? We still load POI around the map center. */
-
+  async function loadPOIsInView(force=false){
     if(poiAbort) poiAbort.abort();
     poiAbort = new AbortController();
-
+    const btn=document.getElementById("poiReloadBtn");
+    if(btn){btn.disabled=true;btn.textContent="Loading POI…";}
     setPOIStatus(t("poi_loading"));
-
+    const endpoints=["https://overpass-api.de/api/interpreter","https://overpass.private.coffee/api/interpreter","https://overpass.kumi.systems/api/interpreter"];
     try{
-      const ref = getRefPoint();
-      const z = map.getZoom();
-      const radius = (z < 11) ? 1800 : (z < 13) ? 3000 : (z < 15) ? 5000 : 7500;
-      const q = overpassQuery(bboxAroundPoint(ref, radius));
-      const res = await fetch("https://overpass-api.de/api/interpreter", {
-        method:"POST",
-        body:q,
-        signal: poiAbort.signal,
-        headers: { "Content-Type":"text/plain;charset=UTF-8" }
-      });
-
-      if(!res.ok){
-        setPOIStatus(t("poi_rate"));
-        return;
-      }
-
-      const data = await res.json();
-      const elements = Array.isArray(data.elements) ? data.elements : [];
-
-      let filtered = elements
-        .filter(el => el && el.tags && (el.tags.name || el.tags.brand || el.tags.amenity === "bar" || el.tags.amenity === "pub"))
-        .map(el => {
-          const k = poiKind(el.tags);
-          return k ? { el, k } : null;
-        })
-        .filter(Boolean)
-        .map(x => ({ ...x, dist: haversineMeters(getRefPoint(), [x.el.lon, x.el.lat]) }))
-        .sort((a,b) => a.dist - b.dist);
-
-      const METERS_BY_KIND = { bank: 55, default: 35 };
-      filtered = dedupeByProximity(filtered, METERS_BY_KIND);
-
-      const MAX_POI = 100;
-      filtered = filtered.slice(0, MAX_POI);
-
-      const seen = new Set(filtered.map(x => `n${x.el.id}`));
-
-      for(const [id, marker] of poiMarkers.entries()){
-        if(!seen.has(id)){
-          marker.remove();
-          poiMarkers.delete(id);
-        }
-      }
-
-      for(const item of filtered){
-        const el = item.el;
-        const id = `n${el.id}`;
-        if(poiMarkers.has(id)) continue;
-
-        const name = el.tags.name || el.tags.brand || "(uten navn)";
-        const k = item.k;
-
-        const markerEl = wrapEl(createImgMarker(ICONS[k]), "poi");
-        const m = new maplibregl.Marker({ element: markerEl })
-          .setLngLat([el.lon, el.lat])
-          .addTo(map);
-
-        m.getElement().addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          new maplibregl.Popup({ closeButton:true, closeOnClick:true })
-            .setLngLat([el.lon, el.lat])
-            .setHTML(`
-              <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;font-size:13px">
-                <div style="font-weight:900;margin-bottom:4px">${escapeHtml(name)}</div>
-                <div style="opacity:.75">${escapeHtml(labelFromKind(k))}</div>
-              </div>
-            `)
-            .addTo(map);
-        });
-
-        poiMarkers.set(id, m);
-      }
-
-      setPOIStatus(t("poi_showing",{n: filtered.length}));
-    } catch(e){
-      if(e.name === "AbortError") return;
-      setPOIStatus(t("poi_error"));
-    }
+      const ref=getRefPoint(), z=map.getZoom(); let box;
+      if(force){
+        const b=map.getBounds(), c=map.getCenter(); const latSpan=z<13?0.025:z<15?0.018:0.012; const cosLat=Math.max(0.25,Math.cos(c.lat*Math.PI/180)); const lngSpan=latSpan/cosLat;
+        box=[Math.max(b.getSouth(),c.lat-latSpan),Math.max(b.getWest(),c.lng-lngSpan),Math.min(b.getNorth(),c.lat+latSpan),Math.min(b.getEast(),c.lng+lngSpan)];
+      }else{ const radius=z<11?1800:z<13?3000:z<15?5000:7500; box=bboxAroundPoint(ref,radius); }
+      const q=overpassQuery(box); let data=null,lastError=null;
+      for(const endpoint of endpoints){ try{ const res=await fetch(endpoint,{method:"POST",body:q,signal:poiAbort.signal,headers:{"Content-Type":"text/plain;charset=UTF-8","Accept":"application/json"},cache:"no-store"}); if(res.ok){data=await res.json();break;} lastError=new Error("HTTP "+res.status); }catch(e){if(e.name==="AbortError")throw e;lastError=e;} }
+      if(!data){ const encoded=encodeURIComponent(q); for(const endpoint of endpoints){ try{ const res=await fetch(endpoint+"?data="+encoded,{signal:poiAbort.signal,headers:{"Accept":"application/json"},cache:"no-store"}); if(res.ok){data=await res.json();break;} lastError=new Error("GET HTTP "+res.status); }catch(e){if(e.name==="AbortError")throw e;lastError=e;} } }
+      if(!data)throw lastError||new Error("Overpass unavailable");
+      const elements=Array.isArray(data.elements)?data.elements:[];
+      let filtered=elements.filter(el=>el&&el.tags&&(el.tags.name||el.tags.brand||el.tags.amenity==="bar"||el.tags.amenity==="pub")).map(el=>{const k=poiKind(el.tags);return k?{el,k}:null;}).filter(Boolean).map(x=>({...x,dist:haversineMeters(getRefPoint(),[x.el.lon,x.el.lat])})).sort((a,b)=>a.dist-b.dist);
+      filtered=dedupeByProximity(filtered,{bank:55,default:35}).slice(0,100);
+      if(force){for(const marker of poiMarkers.values())marker.remove();poiMarkers.clear();}else{const seen=new Set(filtered.map(x=>`n${x.el.id}`));for(const [id,marker] of poiMarkers.entries()){if(!seen.has(id)){marker.remove();poiMarkers.delete(id);}}}
+      for(const item of filtered){ const el=item.el,id=`n${el.id}`; if(poiMarkers.has(id))continue; const name=el.tags.name||el.tags.brand||"(uten navn)",k=item.k; const markerEl=wrapEl(createImgMarker(ICONS[k]),"poi"); const m=new maplibregl.Marker({element:markerEl}).setLngLat([el.lon,el.lat]).addTo(map); markerEl.addEventListener("click",ev=>{ev.stopPropagation();new maplibregl.Popup({closeButton:true,closeOnClick:true}).setLngLat([el.lon,el.lat]).setHTML(`<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;font-size:13px"><div style="font-weight:900;margin-bottom:4px">${escapeHtml(name)}</div><div style="opacity:.75">${escapeHtml(labelFromKind(k))}</div></div>`).addTo(map);}); poiMarkers.set(id,m); }
+      setPOIStatus(t("poi_showing",{n:filtered.length})+(force?" • current area":""));
+    }catch(e){if(e.name!=="AbortError")setPOIStatus("POI error: "+(e.message||"Overpass unavailable"));}finally{if(btn){btn.disabled=false;btn.textContent="Reload POI";}}
   }
+  const poiReloadBtn=document.getElementById("poiReloadBtn");
+  if(poiReloadBtn)poiReloadBtn.addEventListener("click",()=>loadPOIsInView(true));
+  if(map.loaded())setTimeout(()=>loadPOIsInView(false),700);else map.once("load",()=>setTimeout(()=>loadPOIsInView(false),700));
+
 </script>
 </body>
 </html>
